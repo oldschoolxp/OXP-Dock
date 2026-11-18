@@ -183,7 +183,9 @@ export default function register(ctx, h) {
   });
 
   // ---------- Kalender: Outlook (falls offen), iCal-Links, Streamplan ----------
-  ctx.provide("calendar", 5 * 60_000, async () => {
+  const kalenderIntervall = 5 * 60_000;
+  let kalenderStand = 0;
+  ctx.provide("calendar", kalenderIntervall, async () => {
     const events = [];
     const quellen = [];
     try {
@@ -209,9 +211,13 @@ export default function register(ctx, h) {
       .filter((e) => new Date(e.end || e.start).getTime() >= von)
       .sort((a, b) => new Date(a.start) - new Date(b.start))
       .slice(0, 300);
+    kalenderStand = Date.now();
     return { events: list, sources: [...new Set(quellen)], ics: store.ics.length };
   });
-  ctx.popup("calendar", async () => ({ ics: store.ics }));
+  ctx.popup("calendar", () => {
+    if (Date.now() - kalenderStand >= kalenderIntervall) void ctx.refresh("calendar");
+    return { ics: store.ics };
+  });
   ctx.action("calendar", async (a, v) => {
     if (a === "addIcs" && typeof v === "string" && /^(https|webcal):\/\//i.test(v.trim())) store.ics.push(v.trim());
     if (a === "removeIcs") store.ics = store.ics.filter((u) => u !== v);

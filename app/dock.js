@@ -12,11 +12,11 @@ window.OXPesc = esc;
 // ---------- feste Knöpfe ----------
 $("start").addEventListener("click", () => api.invoke("start-menu"));
 $("start").addEventListener("contextmenu", (e) => { e.preventDefault(); api.invoke("start-menu-context"); });
-// Lupe und „^“ öffnen eigene Fenster über der Leiste
+// Lupe, „^“ und Uhr öffnen eigene Fenster über der Leiste.
 const fensterAuf = (id, el) => {
   hideTip();
   const r = el.getBoundingClientRect();
-  api.invoke("widget-popup", { id, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+  api.invoke("widget-popup", { id, source: el.id, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
 };
 $("search").addEventListener("click", () => fensterAuf("suche", $("search")));
 $("tray").addEventListener("click", () => fensterAuf("tray", $("tray")));
@@ -24,7 +24,13 @@ const quick = $("quick");
 quick.addEventListener("click", () => { hideTip(); api.invoke("keys", "quick"); });
 quick.addEventListener("focus", () => showTip(quick));
 quick.addEventListener("blur", () => { if (tipFor === quick) hideTip(); });
-$("clock").addEventListener("click", () => api.invoke("keys", "notifications"));
+const clock = $("clock");
+clock.addEventListener("click", () => fensterAuf("calendar", clock));
+clock.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  hideTip();
+  api.invoke("keys", "notifications");
+});
 $("desktop").addEventListener("click", () => api.invoke("keys", "desktop"));
 document.addEventListener("contextmenu", (e) => {
   e.preventDefault();

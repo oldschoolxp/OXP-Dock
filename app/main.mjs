@@ -542,10 +542,18 @@ function openPopup(view, payload, anchorRect, { sticky = false, key = view, entr
   const db = entry.win.getBounds();
   const z = config.look.scale;
   const anchor = { x: db.x + anchorRect.x * z, y: db.y + anchorRect.y * z, width: anchorRect.width * z, height: anchorRect.height * z };
+  const display = view === "calendar" ? displayById(entry.displayId) : null;
+  let limits = null;
+  if (display) {
+    const d = display.bounds;
+    const barTop = entry.barRect?.y ?? d.y + d.height - dockHeight();
+    // 8 DIP Bildschirmrand, 8 DIP Abstand zur Leiste und 24 CSS-Pixel für Kartenrand und Innenabstand.
+    limits = { width: Math.floor((d.width - 16) / z) - 24, height: Math.floor((barTop - d.y - 16) / z) - 24 };
+  }
   clearThumbs();
-  popupState = { view, anchor, sticky, key, size: null, entry };
+  popupState = { view, anchor, sticky, key, size: null, entry, limits };
   popupLeftAt = 0;
-  popup.webContents.send("popup-view", { view, payload, look: config.look });
+  popup.webContents.send("popup-view", { view, payload, look: config.look, limits });
 }
 
 function placePopup(width, height) {
@@ -830,25 +838,27 @@ async function loadWidgetModules() {
   baukasten.sync();
 }
 
-ipcMain.handle("widget-popup", async (e, { id, rect }) => {
+ipcMain.handle("widget-popup", async (e, { id, rect, source }) => {
   if (!baukasten.hasPopup(id)) return false;
-  if (popupState?.key === "w:" + id) {
+  const entry = [...docks.values()].find((d) => d.win.webContents === e.sender);
+  if (!entry) return false;
+  const key = id === "calendar" && source === "clock" ? "w:calendar:clock" : "w:" + id;
+  if (popupState?.key === key && popupState.entry === entry) {
     hidePopup(); // zweiter Klick schließt
     return true;
   }
-  const entry = [...docks.values()].find((d) => d.win.webContents === e.sender);
   const payload = await baukasten.popupData(id, {});
-  openPopup(id, payload, rect, { sticky: true, key: "w:" + id, entry });
+  openPopup(id, payload, rect, { sticky: true, key, entry });
   pushData(); // aktuelle Widget-Daten auch ins Widget-Fenster (ohne Programmliste/Symbole)
   return true;
 });
 ipcMain.handle("widget-action", async (_e, { id, action, value }) => baukasten.act(id, action, value));
 ipcMain.handle("widget-popup-refresh", async (_e, { id, req }) => {
-  if (!popupState || popupState.key !== "w:" + id) return;
+  if (!popupState?.key.startsWith("w:") || popupState.view !== id) return;
   const state = popupState;
   const payload = await baukasten.popupData(id, req);
   if (popupState !== state || !popup || popup.isDestroyed()) return;
-  popup.webContents.send("popup-view", { view: id, payload, look: config.look });
+  popup.webContents.send("popup-view", { view: id, payload, look: config.look, limits: state.limits });
 });
 
 // ---------- Widget-Daten ----------

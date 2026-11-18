@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.1.2 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.1.3 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -26,7 +26,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 | Wetter | Open-Meteo (kostenlos, ohne Konto), Ort in den Einstellungen |
 | Netzwerksymbol | Zeigt LAN, WLAN oder getrennt. Beim Darüberfahren erscheinen Netzwerkname, Internetstatus und bei authentifizierten Domänennetzwerken die Domäne. Klick = Schnelleinstellungen (Win+A) |
 | Pfeil rechts | Kompakte Liste der Hintergrundprogramme. Berücksichtigt gespeicherte Windows-Infobereichseinträge mit laufenden Prozessen und ergänzt Programme ohne sichtbares Fenster. Klick = öffnen, ✕ bzw. Rechtsklick = Beenden mit Bestätigung |
-| Uhr | Kalender & Benachrichtigungen (Win+N) |
+| Uhr | Klick = Kalender über Uhrzeit und Datum · Rechtsklick = Windows-Benachrichtigungen (Win+N) |
 | ganz rechts | Desktop anzeigen (Win+D) |
 
 Vollbild-Programme (Spiele, Videos) blenden das Dock automatisch aus.

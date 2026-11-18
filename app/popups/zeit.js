@@ -47,11 +47,11 @@
     }
     const kommend = cal.events.filter((e) => new Date(e.end || e.start) >= heute).slice(0, 7);
     const fmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
-    k.innerHTML = `<div style="width:560px;display:flex;gap:14px">
-      <div style="width:250px"><div class="zeile" style="padding:0 0 6px"><button class="knopf" id="zurueck">‹</button><b class="fuell" style="text-align:center">${erster.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</b><button class="knopf" id="vor">›</button></div>
+    k.innerHTML = `<div class="kalender-layout">
+      <div><div class="zeile" style="padding:0 0 6px"><button class="knopf" id="zurueck" aria-label="Vorheriger Monat">‹</button><b class="fuell" style="text-align:center">${erster.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</b><button class="knopf" id="vor" aria-label="Nächster Monat">›</button></div>
         <div class="kal-gitter">${gitter}</div>
         <p class="leise" style="font-size:11px;margin:8px 0 0">Quellen: ${[...cal.sources, "Streamplan"].join(", ")}${cal.sources.includes("Outlook") ? "" : " · Outlook-Termine erscheinen, wenn Outlook geöffnet ist"}</p></div>
-      <div style="flex:1;min-width:0"><h3>Demnächst</h3><div class="liste" style="max-height:220px">${
+      <div><h3>Demnächst</h3><div class="liste" style="max-height:220px">${
         kommend.map((e) => `<div class="eintrag" style="align-items:flex-start"><span class="leise" style="width:90px;flex:none;font-size:11.5px">${fmt.format(new Date(e.start))}${e.allDay ? "" : "<br>" + uhr(e.start)}</span><span style="flex:1"><b>${w.esc(e.title)}</b><br><span class="leise" style="font-size:11px">${w.esc(e.source)}${e.place ? " · " + w.esc(e.place) : ""}</span></span></div>`).join("") || '<p class="leise">Keine Termine.</p>'
       }</div>
         <h3 style="margin-top:10px">Google-/iCal-Kalender</h3>

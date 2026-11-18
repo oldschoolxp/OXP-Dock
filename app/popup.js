@@ -62,7 +62,7 @@ function farben(look) {
   s.setProperty("--bar-farbe", look.barColor);
 }
 
-api.on("popup-view", ({ view, payload, look }) => {
+api.on("popup-view", ({ view, payload, look, limits }) => {
   farben(look);
   if (!view) {
     aktuell = null;
@@ -75,6 +75,8 @@ api.on("popup-view", ({ view, payload, look }) => {
   const neu = aktuell !== view;
   aktuell = view;
   karte.hidden = false;
+  karte.style.setProperty("--kalender-max-breite", limits ? `${limits.width}px` : "560px");
+  karte.style.setProperty("--kalender-max-hoehe", limits ? `${limits.height}px` : "none");
   if (neu) {
     // Einblend-Animation neu starten
     karte.style.animation = "none";
