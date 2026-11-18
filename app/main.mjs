@@ -1,7 +1,7 @@
 // OXP Dock – Hauptprozess.
 // Ein schmales, immer sichtbares Fenster am unteren Bildschirmrand ersetzt die Windows-Taskleiste:
 // OX-Startknopf, angeheftete Programme, offene Fenster und Live-Widgets.
-import { app, BrowserWindow, ipcMain, screen, shell, Menu, dialog, nativeImage, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, powerMonitor, screen, shell, Menu, dialog, nativeImage, Notification } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -327,6 +327,8 @@ const iconFailed = new Map();
 
 const docks = new Map(); // Bildschirm-ID -> { win, hwnd, displayId, barRect, ignoring, hiddenFs }
 let dock = null; // Dock auf dem Hauptbildschirm (für Dialoge)
+let desktopPaused = false;
+let unlockTimer = null;
 let settingsWin = null;
 
 const displayById = (id) => screen.getAllDisplays().find((d) => d.id === id) || null;
@@ -344,7 +346,7 @@ function entryAtCursor() {
 
 /** Docks mit den angeschlossenen Bildschirmen abgleichen und alle neu ausrichten. */
 function placeDock() {
-  if (lizenzGesperrt) return; // ohne gültige Lizenz keine Leiste – dann bleibt die Windows-Taskleiste
+  if (lizenzGesperrt || desktopPaused || quitting) return;
   const wanted = config.allMonitors ? screen.getAllDisplays() : [screen.getPrimaryDisplay()];
   const ids = new Set(wanted.map((d) => d.id));
   for (const [id, d] of docks) {
@@ -360,7 +362,8 @@ function placeDock() {
   dock = docks.get(screen.getPrimaryDisplay().id)?.win || [...docks.values()][0]?.win || null;
 }
 
-function placeEntry(d) {
+function placeEntry(d, fg = win.foregroundWindow()) {
+  if (desktopPaused || quitting) return;
   const display = displayById(d.displayId);
   if (!display || d.win.isDestroyed()) return;
   // physische Maße des Bildschirms genau von Windows (Electron rechnet bei Skalierung bis zu 2 px daneben)
@@ -368,17 +371,33 @@ function placeEntry(d) {
   const bounds = win.monitorAt(grob.x + grob.width / 2, grob.y + grob.height / 2) || grob;
   d.monitor = bounds;
   const h = dockHeight();
+  if (fg) d.hiddenFs = isFullscreenOn(fg, d);
+  d.placedAt = Date.now();
+  if (d.hiddenFs) {
+    d.win.hide();
+    if (popupState?.entry === d) hidePopup();
+    // Auch die Windows-Arbeitsfläche freigeben, sonst kann Vollbild auf die kleinere Fläche zurückfallen.
+    try {
+      win.releaseBottom(d.hwnd);
+    } catch (e) {
+      console.error("Platz freigeben fehlgeschlagen:", e);
+    }
+    return;
+  }
   try {
     win.reserveBottom(d.hwnd, bounds, Math.round(h * display.scaleFactor), APPBAR_MSG);
   } catch (e) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
   // Fenster ist um tipSpace höher als der reservierte Bereich – dieser obere Teil ist durchklickbar.
-  d.placedAt = Date.now();
   const total = h + tipSpace();
   d.barRect = { x: display.bounds.x, y: display.bounds.y + display.bounds.height - h, width: display.bounds.width, height: h };
   d.win.setBounds({ x: display.bounds.x, y: display.bounds.y + display.bounds.height - total, width: display.bounds.width, height: total });
   d.win.webContents.setZoomFactor(config.look.scale);
+  if (d.ready && !d.win.isVisible()) {
+    d.win.showInactive();
+    d.win.setAlwaysOnTop(true, "screen-saver");
+  }
 }
 
 // Maus nur dort abfangen, wo die Leiste ist – darüber gehen Klicks an die Fenster dahinter.
@@ -420,7 +439,7 @@ function createDock(display) {
     icon: path.join(here, "assets", "icon.ico"),
     webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true },
   });
-  const d = { win: w, hwnd: Number(w.getNativeWindowHandle().readBigUInt64LE(0)), displayId: display.id, barRect: null, ignoring: null, hiddenFs: false };
+  const d = { win: w, hwnd: Number(w.getNativeWindowHandle().readBigUInt64LE(0)), displayId: display.id, barRect: null, ignoring: null, hiddenFs: false, ready: false };
   docks.set(display.id, d);
   w.setAlwaysOnTop(true, "screen-saver");
   w.loadFile(path.join(here, "dock.html"));
@@ -430,22 +449,28 @@ function createDock(display) {
     if (wParam.readUInt32LE(0) === 1 && Date.now() - (d.placedAt || 0) > 1500) placeEntry(d);
   });
   w.once("ready-to-show", () => {
+    d.ready = true;
     placeEntry(d);
-    w.showInactive();
   });
   return d;
 }
 
-function setFullscreen(d, on) {
-  if (!d || d.win.isDestroyed() || on === d.hiddenFs) return;
-  d.hiddenFs = on;
-  if (on) {
-    d.win.hide();
-    if (popupState?.entry === d) hidePopup();
-  } else {
-    d.win.showInactive();
-    d.win.setAlwaysOnTop(true, "screen-saver");
-  }
+function pauseDesktop() {
+  clearTimeout(unlockTimer);
+  unlockTimer = null;
+  desktopPaused = true;
+  hidePopup();
+}
+
+function resumeDesktop() {
+  clearTimeout(unlockTimer);
+  desktopPaused = true;
+  // Windows kann Vordergrundfenster und Bildschirmgrößen erst nach dem Entsperrsignal wiederherstellen.
+  unlockTimer = setTimeout(() => {
+    unlockTimer = null;
+    desktopPaused = false;
+    placeDock();
+  }, 1500);
 }
 
 // ---------- Fensterliste (wird regelmäßig abgefragt) ----------
@@ -460,6 +485,8 @@ function isFullscreenOn(fg, d) {
   if (!fg || isDockHwnd(fg)) return false;
   const cls = win.windowClass(fg);
   if (["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"].includes(cls)) return false;
+  // Ohne AppBar können auch normal maximierte Fenster bis zum Bildschirmrand reichen.
+  if (win.isFramedMaximized(fg)) return false;
   const r = win.windowRect(fg);
   // genaue Maße des Bildschirms, auf dem dieses Dock liegt – direkt von Windows
   const b = d.monitor || win.monitorOfWindow(d.hwnd);
@@ -469,11 +496,14 @@ function isFullscreenOn(fg, d) {
 }
 
 async function pollWindows() {
+  if (desktopPaused || quitting) return;
   try {
-    if (taskbarHidden && !quitting) win.keepWindowsTaskbarHidden();
+    if (taskbarHidden) win.keepWindowsTaskbarHidden();
     const fg = win.foregroundWindow();
     if (fg && !isDockHwnd(fg)) lastForeground = fg;
-    for (const d of docks.values()) setFullscreen(d, isFullscreenOn(fg, d));
+    if (fg) for (const d of docks.values()) {
+      if (isFullscreenOn(fg, d) !== d.hiddenFs) placeEntry(d, fg);
+    }
 
     const list = win.listWindows(process.pid);
     const neueSymbole = {};
@@ -1367,7 +1397,12 @@ app.whenReady().then(() => {
     onStatus: (z) => settingsWin && !settingsWin.isDestroyed() && settingsWin.webContents.send("update-status", z),
     automatisch: () => config.autoUpdate !== false,
   });
-  screen.on("display-metrics-changed", () => setTimeout(placeDock, 200));
+  powerMonitor.on("lock-screen", pauseDesktop);
+  powerMonitor.on("unlock-screen", resumeDesktop);
+  screen.on("display-metrics-changed", (_event, _display, metrics) => {
+    // Die eigene AppBar-Reservierung ändert die Arbeitsfläche, nicht die Bildschirmmaße.
+    if (metrics.some((metric) => metric !== "workArea")) setTimeout(placeDock, 200);
+  });
   screen.on("display-added", () => setTimeout(placeDock, 500));
   screen.on("display-removed", () => setTimeout(placeDock, 500));
 

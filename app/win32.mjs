@@ -27,6 +27,7 @@ const GetClassNameW = user32.func("int __stdcall GetClassNameW(intptr_t hWnd, vo
 const IsWindowVisible = user32.func("bool __stdcall IsWindowVisible(intptr_t hWnd)");
 const IsWindow = user32.func("bool __stdcall IsWindow(intptr_t hWnd)");
 const IsIconic = user32.func("bool __stdcall IsIconic(intptr_t hWnd)");
+const IsZoomed = user32.func("bool __stdcall IsZoomed(intptr_t hWnd)");
 const GetWindow = user32.func("intptr_t __stdcall GetWindow(intptr_t hWnd, uint32 cmd)");
 const GetWindowLongPtrW = user32.func("intptr_t __stdcall GetWindowLongPtrW(intptr_t hWnd, int index)");
 const GetWindowThreadProcessId = user32.func("uint32 __stdcall GetWindowThreadProcessId(intptr_t hWnd, _Out_ uint32 *pid)");
@@ -47,7 +48,9 @@ const QueryFullProcessImageNameW = kernel32.func(
 const DwmGetWindowAttribute = dwmapi.func("int32 __stdcall DwmGetWindowAttribute(intptr_t hWnd, uint32 attr, void *buf, uint32 size)");
 
 const GW_OWNER = 4;
+const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
+const WS_CAPTION = 0x00c00000;
 const WS_EX_TOOLWINDOW = 0x80;
 const WS_EX_APPWINDOW = 0x40000;
 const WS_EX_NOACTIVATE = 0x08000000;
@@ -129,6 +132,10 @@ export function windowRect(hwnd) {
 
 export function windowClass(hwnd) {
   return readText(GetClassNameW, hwnd);
+}
+
+export function isFramedMaximized(hwnd) {
+  return IsZoomed(hwnd) && (Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & WS_CAPTION) === WS_CAPTION;
 }
 
 export function activate(hwnd) {
