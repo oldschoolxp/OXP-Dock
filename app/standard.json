@@ -1,0 +1,23 @@
+{
+  "_hinweis": "Grundeinrichtung für neue Installationen (Stand 1.0.0). Wird nur benutzt, solange noch keine eigenen Einstellungen existieren.",
+  "hideWindowsTaskbar": true,
+  "allMonitors": true,
+  "autostart": true,
+  "autoUpdate": true,
+  "channel": "oldschoolxptv",
+  "streamScope": "all",
+  "look": {
+    "barColor": "#1d1d21",
+    "accent": "#a49db3",
+    "opacity": 0.46,
+    "scale": 1.15,
+    "magnify": true,
+    "magnifyLevel": 1.8,
+    "previews": true,
+    "fullWidth": false
+  },
+  "widgetOrder": ["live", "stream", "aiLimits", "nowPlaying", "whatsapp", "todos", "stopwatch", "audioOutput", "audio"],
+  "widgetOptions": {
+    "nowPlaying": { "hintergrund": "aus" }
+  }
+}

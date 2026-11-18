@@ -1,0 +1,70 @@
+{
+  "name": "oxp-dock",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OXP Dock – eigene Taskleiste mit Live-Widgets für OldschoolXP",
+  "main": "app/main.mjs",
+  "author": "OldschoolXP",
+  "scripts": {
+    "start": "electron .",
+    "installer": "electron-builder --win nsis",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "koffi": "^2.9.0"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "de.oldschoolxp.dock",
+    "productName": "OXP Dock",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "app/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**/*",
+      "app/helfer/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "app/assets/icon.ico",
+      "executableName": "OXP-Dock"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OXP Dock",
+      "artifactName": "OXP-Dock-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "oldschoolxp",
+        "repo": "OXP-Dock",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oldschoolxp/OXP-Dock.git"
+  }
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>OXP Dock</title>
+<link rel="stylesheet" href="dock.css">
+</head>
+<body>
+  <div id="bar">
+    <button id="start" class="tile" data-tip="Start (Rechtsklick: Menü)">
+      <img src="assets/oxp-wuerfel.png" alt="OXP">
+    </button>
+    <button id="search" class="icon-btn" data-tip="Suchen">
+      <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+    </button>
+    <div class="sep"></div>
+    <div id="apps"><div id="appsTrack"></div></div>
+    <div class="spacer"></div>
+    <div id="widgets"></div>
+    <div class="sep"></div>
+    <button id="tray" class="icon-btn" data-tip="Hintergrund-Programme"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+    <button id="quick" class="icon-btn" data-tip="WLAN, Ton, Akku (Win+A)">
+      <svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1" class="fill"/></svg>
+    </button>
+    <button id="clock" data-tip="Kalender und Benachrichtigungen">
+      <span id="time">--:--</span>
+      <span id="date"></span>
+    </button>
+    <button id="desktop" data-tip="Desktop anzeigen"></button>
+  </div>
+  <div id="tip"></div>
+<script src="widgets/basis.js"></script>
+<script src="dock.js"></script>
+<script src="widgets/system.js"></script>
+<script src="widgets/zeit.js"></script>
+<script src="widgets/wetter.js"></script>
+<script src="widgets/konten.js"></script>
+<script src="widgets/start.js"></script>
+</body>
+</html>
