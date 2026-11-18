@@ -46,7 +46,7 @@ dann im Task-Manager „Windows-Explorer“ neu starten.
     node node_modules/electron/install.js   # npm lässt Install-Skripte aus, Electron dann von Hand laden
     npm start                               # bzw. electron . --remote-debugging-port=9334 zum Prüfen
     npm run installer                       # → dist-installer/OXP-Dock-Setup-<version>.exe
-    npm run release                         # neue Version veröffentlichen (Version in package.json vorher erhöhen, GH_TOKEN nötig)
+    npm run release -- "Was ist neu"        # neue Version veröffentlichen (vorher Version in package.json erhöhen, gh angemeldet)
 
 Einstellungen liegen in `%APPDATA%\oxp-dock\einstellungen.json`.
 
