@@ -327,6 +327,28 @@ $("woptListe").addEventListener("click", (e) => {
   woptZeichnen();
 });
 
+// ---------- Lizenz ----------
+function lizenzZeigen(s) {
+  if (!s) return;
+  $("lizenzText").textContent = s.text || "–";
+  if (s.key && !$("lizenzKey").value) $("lizenzKey").placeholder = s.key;
+}
+$("lizenzKey").addEventListener("input", () => {
+  const roh = $("lizenzKey").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const ohne = roh.startsWith("DOCK") ? roh.slice(4) : roh;
+  const teile = ["DOCK", ohne.slice(0, 4), ohne.slice(4, 8), ohne.slice(8, 12)].filter((t, i) => i === 0 || t);
+  $("lizenzKey").value = roh ? teile.join("-") : "";
+});
+$("lizenzLos").addEventListener("click", async () => {
+  $("lizenzMeldung").textContent = "Prüfe …";
+  const s = await api.invoke("lizenz-eingeben", $("lizenzKey").value.trim());
+  $("lizenzMeldung").textContent = s.valid ? "✓ Freigeschaltet." : s.text || "Ungültig.";
+  if (s.valid) (($("lizenzKey").value = ""), lizenzZeigen(s));
+});
+$("lizenzNeu").addEventListener("click", async () => lizenzZeigen(await api.invoke("lizenz-pruefen")));
+api.on("lizenz-status", lizenzZeigen);
+api.invoke("lizenz-status").then(lizenzZeigen);
+
 // ---------- Updates ----------
 $("updateCheck").addEventListener("click", () => api.invoke("update-check"));
 api.on("update-status", (z) => {

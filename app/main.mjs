@@ -1,7 +1,7 @@
 // OXP Dock – Hauptprozess.
 // Ein schmales, immer sichtbares Fenster am unteren Bildschirmrand ersetzt die Windows-Taskleiste:
 // OX-Startknopf, angeheftete Programme, offene Fenster und Live-Widgets.
-import { app, BrowserWindow, ipcMain, screen, shell, Menu, dialog, nativeImage } from "electron";
+import { app, BrowserWindow, ipcMain, screen, shell, Menu, dialog, nativeImage, Notification } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,7 @@ import { createSystemhelfer } from "./systemhelfer.mjs";
 import { claudeUsage } from "./claude-login.mjs";
 import { WIDGET_OPTIONEN } from "./widget-optionen.mjs";
 import { initUpdater, jetztPruefen, updateZustand } from "./updater.mjs";
+import * as lizenz from "./lizenz.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Messmodus (nur mit OXP_DOCK_PROFILE=1): wie viel Zeit verbrauchen die wiederkehrenden Aufgaben?
@@ -343,6 +344,7 @@ function entryAtCursor() {
 
 /** Docks mit den angeschlossenen Bildschirmen abgleichen und alle neu ausrichten. */
 function placeDock() {
+  if (lizenzGesperrt) return; // ohne gültige Lizenz keine Leiste – dann bleibt die Windows-Taskleiste
   const wanted = config.allMonitors ? screen.getAllDisplays() : [screen.getPrimaryDisplay()];
   const ids = new Set(wanted.map((d) => d.id));
   for (const [id, d] of docks) {
@@ -620,6 +622,83 @@ ipcMain.handle("np-quelle", () => {
   const passt = (titel.length >= 4 && windowsState.find((w) => w.title.toLowerCase().includes(titel))) || null;
   void app;
   return passt ? { id: `window:${passt.hwnd}:0`, hwnd: passt.hwnd, minimized: passt.minimized } : null;
+});
+
+// ---------- Lizenz ----------
+// Ohne gültige Lizenz (Testphase vorbei, Schlüssel gesperrt …) läuft keine Leiste: Die Windows-Taskleiste
+// bleibt bzw. kommt zurück, und ein Fenster fragt nach dem Schlüssel.
+let lizenzGesperrt = true;
+let lizenzStatus = null;
+let lizenzWin = null;
+
+function dockStarten() {
+  if (!lizenzGesperrt) return;
+  lizenzGesperrt = false;
+  if (config.hideWindowsTaskbar) hideTaskbar();
+  placeDock();
+}
+function dockStoppen() {
+  if (lizenzGesperrt) return;
+  lizenzGesperrt = true;
+  hidePopup();
+  for (const d of docks.values()) {
+    try {
+      win.releaseBottom(d.hwnd);
+    } catch {}
+    if (!d.win.isDestroyed()) d.win.destroy();
+  }
+  docks.clear();
+  dock = null;
+  if (taskbarHidden) showTaskbar();
+}
+function lizenzFenster() {
+  if (lizenzWin && !lizenzWin.isDestroyed()) return lizenzWin.show(), lizenzWin.focus();
+  lizenzWin = new BrowserWindow({
+    width: 500,
+    height: 560,
+    resizable: false,
+    maximizable: false,
+    title: "OXP Dock – Lizenz",
+    backgroundColor: "#121016",
+    autoHideMenuBar: true,
+    icon: path.join(here, "assets", "icon.ico"),
+    webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true },
+  });
+  lizenzWin.loadFile(path.join(here, "lizenz.html"));
+}
+function lizenzAnwenden(s) {
+  lizenzStatus = s;
+  if (s.valid) {
+    dockStarten();
+    if (lizenzWin && !lizenzWin.isDestroyed()) setTimeout(() => lizenzWin?.close(), 1200);
+    // kurz vor Ende der Testphase einmal am Tag erinnern
+    const tage = s.expiresAt ? (new Date(s.expiresAt) - Date.now()) / 864e5 : null;
+    if (s.trial && tage !== null && tage <= 3 && config.lizenzErinnert !== new Date().toDateString()) {
+      config.lizenzErinnert = new Date().toDateString();
+      saveConfig();
+      try {
+        new Notification({ title: "OXP Dock – Testphase", body: `Die Testphase endet in ${Math.ceil(tage)} Tag(en). Schlüssel eingeben: Einstellungen → Info.` }).show();
+      } catch {}
+    }
+  } else {
+    dockStoppen();
+    lizenzFenster();
+  }
+  const text = lizenz.beschreibung(s);
+  settingsWin?.webContents.send("lizenz-status", { ...s, text });
+  return { ...s, text };
+}
+async function lizenzStart() {
+  lizenzAnwenden(await lizenz.pruefen());
+  setInterval(async () => lizenzAnwenden(await lizenz.pruefen()), 6 * 60 * 60_000);
+}
+ipcMain.handle("lizenz-status", () => (lizenzStatus ? { ...lizenzStatus, text: lizenz.beschreibung(lizenzStatus) } : null));
+ipcMain.handle("lizenz-pruefen", async () => lizenzAnwenden(await lizenz.pruefen()));
+ipcMain.handle("lizenz-eingeben", async (_e, key) => {
+  if (typeof key !== "string" || !/^DOCK-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(key.trim())) return { valid: false, text: "Ungültiges Format." };
+  const s = await lizenz.pruefen(key);
+  if (!s.valid) return { ...s, text: lizenz.grundText(s.reason) }; // falscher Schlüssel: bisherigen Zustand behalten
+  return lizenzAnwenden(s);
 });
 
 // ---------- Kontextmenüs ----------
@@ -1246,13 +1325,12 @@ process.on("uncaughtException", (e) => {
 
 // ---------- Start ----------
 
-app.on("second-instance", openSettings);
+app.on("second-instance", () => (lizenzGesperrt ? lizenzFenster() : openSettings()));
 app.on("window-all-closed", (e) => e.preventDefault?.());
 
 app.whenReady().then(() => {
   recoverAfterCrash();
-  if (config.hideWindowsTaskbar) hideTaskbar();
-  placeDock();
+  lizenzStart();
   createPopup();
   loadWidgetModules();
   initUpdater({

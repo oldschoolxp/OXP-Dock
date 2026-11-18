@@ -126,6 +126,13 @@
         <div><b>OXP Dock</b><br><span class="leise" id="version"></span><br><span class="leise">Eine eigene Taskleiste von OldschoolXP</span></div>
       </div>
       <div class="karte">
+        <h2>Lizenz</h2>
+        <div class="row"><span>Status<small id="lizenzText">–</small></span><button class="knopf" id="lizenzNeu">Erneut prüfen</button></div>
+        <div class="row"><span>Lizenzschlüssel<small>Bekommst du von OldschoolXP – beginnt mit DOCK-</small></span>
+          <span style="display:flex;gap:8px"><input class="eingabe" id="lizenzKey" placeholder="DOCK-XXXX-XXXX-XXXX" maxlength="19" spellcheck="false" style="width:220px;font-family:Consolas,monospace;text-transform:uppercase"><button class="knopf haupt" id="lizenzLos">Freischalten</button></span></div>
+        <p class="hint" id="lizenzMeldung" style="margin:4px 0 0"></p>
+      </div>
+      <div class="karte">
         <h2>Updates</h2>
         <div class="row"><span>Status<small id="updateText">–</small></span><button class="knopf haupt" id="updateCheck">Nach Updates suchen</button></div>
         <div class="fortschritt" id="updateBalken" hidden><i></i></div>

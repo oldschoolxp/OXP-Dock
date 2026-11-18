@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>OXP Dock – Lizenz</title>
+<style>
+  :root { --lila: #8f3cff; --text: #f1eef6; --leise: #a49db3; --kante: #2e2939; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0%, #2a1f3d, #121016 70%); color: var(--text); font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  .karte { width: 420px; text-align: center; padding: 28px 30px 24px; }
+  img { width: 92px; height: 92px; filter: drop-shadow(0 0 18px rgba(143, 60, 255, .45)); }
+  h1 { font-size: 21px; margin: 12px 0 4px; }
+  p { color: var(--leise); margin: 0 0 18px; }
+  #grund { color: #ff8fa3; min-height: 21px; margin-bottom: 14px; }
+  input { width: 100%; background: #15131b; color: var(--text); border: 1.5px solid var(--kante); border-radius: 10px; padding: 12px; font: 600 17px/1 "Cascadia Mono", Consolas, monospace; text-align: center; letter-spacing: .08em; outline: none; text-transform: uppercase; }
+  input:focus { border-color: var(--lila); }
+  button { font: inherit; cursor: pointer; border-radius: 10px; padding: 10px 16px; border: 1px solid var(--kante); background: #2a2534; color: var(--text); }
+  .haupt { width: 100%; margin-top: 12px; background: var(--lila); border-color: var(--lila); color: #fff; font-weight: 600; }
+  .haupt:disabled { opacity: .5; cursor: default; }
+  .unten { display: flex; justify-content: space-between; margin-top: 18px; gap: 10px; }
+  .unten button { background: none; color: var(--leise); padding: 6px 4px; border: 0; }
+  .unten button:hover { color: var(--text); }
+  #ok { color: #5ad19a; }
+</style>
+</head>
+<body>
+  <div class="karte">
+    <img src="assets/oxp-wuerfel.png" alt="">
+    <h1>OXP Dock freischalten</h1>
+    <p id="text">Gib deinen Lizenzschlüssel ein. Den bekommst du von OldschoolXP.</p>
+    <div id="grund"></div>
+    <input id="key" placeholder="DOCK-XXXX-XXXX-XXXX" maxlength="19" autocomplete="off" spellcheck="false">
+    <button class="haupt" id="los">Freischalten</button>
+    <div class="unten">
+      <button id="neu">Erneut prüfen</button>
+      <button id="ende">Dock beenden</button>
+    </div>
+  </div>
+<script src="lizenz.js"></script>
+</body>
+</html>
