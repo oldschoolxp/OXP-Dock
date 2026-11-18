@@ -185,6 +185,23 @@ namespace OxpDock {
   public class ProcInfo { public string name; public int pid; public double cpu; public double ramMb; public string path; }
 
   public static class Procs {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder path, ref int size);
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+
+    public static string ImagePath(int pid) {
+      var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+      if (handle == IntPtr.Zero) return null;
+      try {
+        var path = new System.Text.StringBuilder(32768);
+        int size = path.Capacity;
+        return QueryFullProcessImageName(handle, 0, path, ref size) ? path.ToString() : null;
+      } finally { CloseHandle(handle); }
+    }
+
     static Dictionary<int, TimeSpan> last = new Dictionary<int, TimeSpan>();
     static DateTime lastAt = DateTime.MinValue;
     public static List<ProcInfo> Sample() {
@@ -237,6 +254,21 @@ function MediaManager {
   [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
   if (-not $script:mm) { $script:mm = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]) }
   $script:mm
+}
+
+function ResolveKnownFolderPath([string]$value) {
+  if ($value -notmatch '^\{([0-9A-F-]+)\}\\(.+)$') { return $value }
+  $map = @{
+    '6D809377-6AF0-444B-8957-A3773F02200E' = $env:ProgramW6432
+    '7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E' = ${env:ProgramFiles(x86)}
+    '905E63B6-C1BF-494E-B29C-65B732D3D21A' = $env:ProgramFiles
+    'F38BF404-1D43-42F2-9305-67DE0B28FC23' = $env:SystemRoot
+    '1AC14E77-02E7-4E5D-B744-2EB1AE5198B7' = (Join-Path $env:SystemRoot 'System32')
+    'F1B32785-6FBA-4FCF-9D55-7B8E7F157091' = $env:LOCALAPPDATA
+    '3EB685DB-65F9-4CF6-A03A-E3EF65729F3D' = $env:APPDATA
+  }
+  $base = $map[$Matches[1]]
+  if ($base) { Join-Path $base $Matches[2] }
 }
 
 function Handle($req) {
@@ -308,32 +340,49 @@ function Handle($req) {
     'resolveAppId' {
       # „{Bekannter-Ordner-GUID}\pfad\prog.exe“ in einen echten Pfad umwandeln
       $id = [string]$a.appId
-      if ($id -match '^\{([0-9A-F-]+)\}\\(.+)$') {
-        $map = @{ '6D809377-6AF0-444B-8957-A3773F02200E' = $env:ProgramW6432; '7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E' = ${env:ProgramFiles(x86)}; 'F38BF404-1D43-42F2-9305-67DE0B28FC23' = $env:SystemRoot; '1AC14E77-02E7-4E5D-B744-2EB1AE5198B7' = (Join-Path $env:SystemRoot 'System32'); 'F1B32785-6FBA-4FCF-9D55-7B8E7F157091' = $env:LOCALAPPDATA; '3EB685DB-65F9-4CF6-A03A-E3EF65729F3D' = $env:APPDATA }
-        $base = $map[$Matches[1].ToUpper()]
-        if ($base) { return (Join-Path $base $Matches[2]) }
-      }
-      $null
+      if ($id -match '^\{[0-9A-F-]+\}\\') { ResolveKnownFolderPath $id }
     }
     'backgroundApps' {
-      # Programme mit eigenem Prozess, aber ohne sichtbares Fenster (laufen im Hintergrund / im Infobereich)
-      $mitFenster = @{}
-      foreach ($p in $a.visiblePids) { $mitFenster[[int]$p] = $true }
+      # Explorer speichert auch alte Einträge. Nur Pfade mit einem laufenden Prozess verwenden.
+      $registriert = @{}
+      foreach ($key in (Get-ChildItem -LiteralPath 'HKCU:\Control Panel\NotifyIconSettings' -ErrorAction SilentlyContinue)) {
+        $wert = [string]$key.GetValue('ExecutablePath')
+        if (-not $wert) { continue }
+        $pfad = ResolveKnownFolderPath ([Environment]::ExpandEnvironmentVariables($wert))
+        if ($pfad) { $registriert[$pfad] = $true }
+      }
       $sitzung = [Diagnostics.Process]::GetCurrentProcess().SessionId
-      $aus = '\\Windows\\|\\WindowsApps\\MicrosoftWindows|\\Common Files\\|\\Microsoft\\EdgeWebView\\|\\NVIDIA Corporation\\|\\Intel\\|\\Realtek\\|\\Windows Defender|\\Microsoft Office\\root\\Office16\\(OfficeClickToRun|msoia)|\\dotnet\\|\\nodejs\\|\\Git\\|\\WindowsPowerShell\\|\\electron\\dist\\|\\OXP-Dock'
+      $windowsOrdner = "$env:SystemRoot\"
+      $explorer = Join-Path $env:SystemRoot 'explorer.exe'
+      $werkzeug = '\\(nodejs|dotnet|Git|EdgeWebView)\\|\\node_modules\\electron\\dist\\'
       $liste = @{}
       foreach ($p in (Get-Process | Where-Object { $_.SessionId -eq $sitzung })) {
         try {
-          $pfad = $p.Path
-          if (-not $pfad -or $pfad -match $aus) { continue }
-          $key = $pfad.ToLower()
-          if ($liste.ContainsKey($key)) { $liste[$key].pids += $p.Id; if ($mitFenster[$p.Id]) { $liste[$key].hatFenster = $true }; continue }
-          $name = $p.MainModule.FileVersionInfo.FileDescription
-          if (-not $name) { $name = $p.ProcessName }
-          $liste[$key] = @{ path = $pfad; name = $name; pids = @($p.Id); hatFenster = [bool]$mitFenster[$p.Id] }
+          $pfad = [OxpDock.Procs]::ImagePath($p.Id)
+          if (-not $pfad -or $pfad -eq $explorer -or $pfad -eq $a.ownPath -or $p.ProcessName -eq 'OXP-Dock') { continue }
+          $tray = $registriert.ContainsKey($pfad)
+          $system = $pfad.StartsWith($windowsOrdner, [StringComparison]::OrdinalIgnoreCase)
+          if (-not $tray -and ($system -or $pfad -match $werkzeug)) { continue }
+          if (-not $liste.ContainsKey($pfad)) {
+            $name = $null
+            try { $name = [Diagnostics.FileVersionInfo]::GetVersionInfo($pfad).FileDescription } catch {}
+            if (-not $name -or -not $name.Trim()) { $name = $p.ProcessName }
+            $liste[$pfad] = @{ path = $pfad; name = $name.Trim(); pids = @(); tray = $tray; canQuit = -not $system }
+          }
+          $liste[$pfad].pids += $p.Id
         } catch {}
       }
-      @($liste.Values | Sort-Object { $_.name } | ForEach-Object { @{ path = $_.path; name = $_.name; count = $_.pids.Count; hasWindow = $_.hatFenster } })
+      @{ apps = @($liste.Values) }
+    }
+    'quitBackgroundApp' {
+      $sitzung = [Diagnostics.Process]::GetCurrentProcess().SessionId
+      $fehler = $false
+      foreach ($id in $a.pids) {
+        $p = Get-Process -Id $id -ErrorAction SilentlyContinue
+        if (-not $p -or $p.SessionId -ne $sitzung -or [OxpDock.Procs]::ImagePath($p.Id) -ne $a.path) { continue }
+        try { $p.Kill() } catch { if (-not $p.HasExited) { $fehler = $true } }
+      }
+      -not $fehler
     }
     'icon' { [OxpDock.ShellIcon]::Png([string]$a.path, [int]($a.size | ForEach-Object { if ($_) { $_ } else { 48 } })) }
     'audio' {

@@ -48,8 +48,7 @@ api.on("widget", ({ key, value }) => {
 function groesseMelden() {
   // nach dem Zeichnen messen und dem Hauptprozess die Größe schicken (inkl. Rand für den Schatten)
   // sofort messen: ein verstecktes Fenster bekommt keine Animations-Frames, sonst würde es nie erscheinen
-  const r = karte.getBoundingClientRect();
-  api.invoke("popup-size", { width: Math.ceil(r.width) + 2, height: Math.ceil(r.height) + 2 });
+  api.invoke("popup-size", { width: karte.offsetWidth + 2, height: karte.offsetHeight + 2 });
   // Bilder (Vorschau, Cover) können die Größe danach noch ändern
   karte.querySelectorAll("img").forEach((img) => {
     if (!img.complete) img.addEventListener("load", groesseMelden, { once: true });

@@ -93,56 +93,54 @@ export default function register(ctx, h) {
   });
 
   // ---------- Hintergrund-Programme ----------
-  // Windows-/Entwickler-Innereien, die man nicht „öffnen“ will
-  const RAUS = /[\\/]nodejs[\\/]|node(_repl)?\.exe$|toast|feedprovider|packagemanager|ai host|addin|[\\/]claude-data[\\/]|[\\/]resources[\\/]|msedge\.exe$|searchhost|storedesktopextension|widgets|phoneexperience|yourphone|gamebar|lockapp|textinput|runtimebroker/i;
-  const NEBEN = /crash|helper|host|updater|update|service|broker|renderer|native|daemon|agent|watchdog|launcher|setup|install|elevat|handler|reporter|monitor\.exe$|notifier|webview|cef|gpu|utility/i;
+  // Hilfsprozesse nur im Ersatzverfahren filtern. Ein Windows-Infobereichseintrag hat Vorrang.
+  const LAUFZEIT = /^(?:node(?:_repl)?|pwsh|claude|codex(?:-[\w-]+)?|chrome|msedge|widgetboard)\.exe$/i;
+  const HILFSPROZESS = /(?:crashpad[_-]handler|crashreporter|helper|host|updater?|service|broker|renderer|watchdog|webview2|agent|setup|addin\)?|feedprovider|toastnotification|telemetryplugin|packagemanagerserver)\.exe$/i;
   async function hintergrund() {
-    const fenster = h.windows();
-    const pids = fenster.map((w) => w.pid);
-    const ordnerMitFenster = [...new Set(fenster.map((w) => path.dirname(w.exe || "").toLowerCase()).filter(Boolean))];
-    let liste = [];
-    try {
-      liste = await sh.call("backgroundApps", { visiblePids: pids }, 30_000);
-    } catch {
-      return [];
-    }
-    // Programme, die schon ein Fenster haben (oder zu so einem gehören), und Hilfsprozesse weglassen
-    const out = [];
-    for (const p of liste || []) {
-      if (p.hasWindow) continue;
-      const datei = path.basename(p.path);
-      if (NEBEN.test(datei) || RAUS.test(p.path) || RAUS.test(p.name)) continue;
-      const pl = p.path.toLowerCase();
-      if (ordnerMitFenster.some((o) => pl.startsWith(o + "\\"))) continue;
-      // pro Programmordner nur einen Eintrag (z. B. IGCC und IGCCTray)
-      const name = String(p.name).replace(/.root$/i, "").replace(/tray$/i, "").trim() || p.name;
-      if (out.some((x) => x.name.toLowerCase() === name.toLowerCase() || path.dirname(x.path).toLowerCase() === path.dirname(pl))) continue;
-      out.push({ name, path: p.path, count: p.count, icon: await h.iconFor(p.path) });
-    }
-    return out;
+    const { apps } = await sh.call("backgroundApps", { ownPath: process.execPath }, 12_000);
+    const fensterPids = new Set(h.windows().map((w) => w.pid));
+    return apps
+      .filter((a) => {
+        if (a.tray) return true;
+        const exe = path.basename(a.path);
+        return !a.pids.some((pid) => fensterPids.has(pid)) && !LAUFZEIT.test(exe) && !HILFSPROZESS.test(exe);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "de", { numeric: true }) || a.path.localeCompare(b.path, "de"));
   }
-  ctx.popup("tray", async () => ({ apps: await hintergrund() }));
+
+  ctx.popup("tray", async ({ laden }) => {
+    if (!laden) return { loading: true };
+    try {
+      const apps = await hintergrund();
+      return { apps: await Promise.all(apps.map(async (a) => ({
+        name: a.name,
+        path: a.path,
+        canQuit: a.canQuit,
+        icon: await h.iconFor(a.path),
+      }))) };
+    } catch (e) {
+      console.error("Hintergrundprogramme:", e.message);
+      return { error: "Die Programme konnten nicht geladen werden." };
+    }
+  });
+
   ctx.action("tray", async (a, v) => {
-    const liste = await hintergrund();
-    const app = liste.find((x) => x.path === v);
-    if (!app && a !== "settings") return;
-    if (a === "open") {
-      // die meisten Programme im Infobereich zeigen ihr Fenster wieder, wenn man sie erneut startet
-      shell.openPath(app.path);
+    if (a !== "open" && a !== "quit") return;
+    try {
+      const app = (await hintergrund()).find((x) => x.path === v);
+      if (!app) return { error: "Das Programm läuft nicht mehr.", refresh: true };
+      if (a === "open") {
+        const fenster = h.windows().find((w) => app.pids.includes(w.pid));
+        if (fenster) h.win.activate(fenster.hwnd);
+        else if (await shell.openPath(app.path)) return { error: "Das Programm konnte nicht geöffnet werden." };
+        return { ok: true };
+      }
+      if (!app.canQuit) return { error: "Dieses Programm kann hier nicht beendet werden." };
+      const beendet = await sh.call("quitBackgroundApp", { path: app.path, pids: app.pids });
+      return beendet ? { refresh: true } : { error: "Das Programm konnte nicht beendet werden." };
+    } catch (e) {
+      console.error("Hintergrundprogramm:", e.message);
+      return { error: "Die Aktion konnte nicht ausgeführt werden." };
     }
-    if (a === "quit") {
-      const r = await h.dialog.showMessageBox(h.dock(), {
-        type: "warning",
-        buttons: ["Beenden", "Abbrechen"],
-        defaultId: 1,
-        cancelId: 1,
-        title: "Programm beenden",
-        message: `„${app.name}“ beenden?`,
-      });
-      if (r.response === 0) await new Promise((res) => execFile("taskkill", ["/IM", path.basename(app.path), "/F"], { windowsHide: true }, () => res()));
-      return { apps: await hintergrund() };
-    }
-    if (a === "folder") shell.showItemInFolder(app.path);
-    if (a === "settings") shell.openExternal("ms-settings:startupapps");
   });
 }

@@ -536,10 +536,9 @@ function createPopup() {
 }
 
 /** Ansicht öffnen. anchorRect: Bereich des auslösenden Elements in Dock-Fenster-Koordinaten (CSS-Pixel). */
-function openPopup(view, payload, anchorRect, { sticky = false, key = view } = {}) {
+function openPopup(view, payload, anchorRect, { sticky = false, key = view, entry = entryAtCursor() } = {}) {
   if (!popup || popup.isDestroyed()) return;
-  const entry = entryAtCursor();
-  if (!entry) return;
+  if (!entry || entry.win.isDestroyed()) return;
   const db = entry.win.getBounds();
   const z = config.look.scale;
   const anchor = { x: db.x + anchorRect.x * z, y: db.y + anchorRect.y * z, width: anchorRect.width * z, height: anchorRect.height * z };
@@ -831,21 +830,24 @@ async function loadWidgetModules() {
   baukasten.sync();
 }
 
-ipcMain.handle("widget-popup", async (_e, { id, rect }) => {
+ipcMain.handle("widget-popup", async (e, { id, rect }) => {
   if (!baukasten.hasPopup(id)) return false;
   if (popupState?.key === "w:" + id) {
     hidePopup(); // zweiter Klick schließt
     return true;
   }
+  const entry = [...docks.values()].find((d) => d.win.webContents === e.sender);
   const payload = await baukasten.popupData(id, {});
-  openPopup(id, payload, rect, { sticky: true, key: "w:" + id });
+  openPopup(id, payload, rect, { sticky: true, key: "w:" + id, entry });
   pushData(); // aktuelle Widget-Daten auch ins Widget-Fenster (ohne Programmliste/Symbole)
   return true;
 });
 ipcMain.handle("widget-action", async (_e, { id, action, value }) => baukasten.act(id, action, value));
 ipcMain.handle("widget-popup-refresh", async (_e, { id, req }) => {
   if (!popupState || popupState.key !== "w:" + id) return;
+  const state = popupState;
   const payload = await baukasten.popupData(id, req);
+  if (popupState !== state || !popup || popup.isDestroyed()) return;
   popup.webContents.send("popup-view", { view: id, payload, look: config.look });
 });
 

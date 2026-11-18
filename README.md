@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.0 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.1.1 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -25,6 +25,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 | CPU / RAM | Auslastung, wird orange bei ≥ 90 % |
 | Wetter | Open-Meteo (kostenlos, ohne Konto), Ort in den Einstellungen |
 | WLAN-Symbol | Schnelleinstellungen (Win+A) |
+| Pfeil rechts | Kompakte Liste der Hintergrundprogramme. Berücksichtigt gespeicherte Windows-Infobereichseinträge mit laufenden Prozessen und ergänzt Programme ohne sichtbares Fenster. Klick = öffnen, ✕ bzw. Rechtsklick = Beenden mit Bestätigung |
 | Uhr | Kalender & Benachrichtigungen (Win+N) |
 | ganz rechts | Desktop anzeigen (Win+D) |
 
@@ -69,7 +70,7 @@ Klick auf ein Widget öffnet meist ein Fenster über der Leiste (Popup), Rechtsk
 - **Zeit & Produktivität:** Klappuhr, Analoguhr, Weltuhren, 7 Tage, Tagesleiste, Kalender (Outlook wenn offen + iCal-Links + Streamplan), Aufgaben, Notizen, Pomodoro, Timer, Stoppuhr, Rechner, Bildschirmzeit, Sprachnotiz, Ablage
 - **Wetter, Musik & Kurse:** Wetter, stündlich, heute, Regen-Hinweis, Sonne, Läuft gerade (Windows-Mediensteuerung), Audio-Ausgabe, Krypto (CoinGecko), Aktien (Yahoo), Währungen (EZB)
 - **Konten & KI:** Follower & Abos (Website `/api/social-stats`), Outlook-Mails, Gmail (IMAP + App-Passwort, verschlüsselt), GitHub (über `gh`), WhatsApp, Claude-Limit, KI-Limits (Claude/Codex/Gemini-CLI/DeepSeek)
-- Nicht möglich: Infobereich-Symbole (Windows gibt sie nicht heraus), X-Profil (kostenpflichtige API), Shop-Widgets (Stripe & Co., nicht benutzt)
+- Weitere Integrationen: X und Shop-Widgets sind derzeit nicht enthalten.
 
 Fenster-Vorschau: beim Verweilen über einem Programm mit offenen Fenstern (Live-Bilder, Klick = nach vorn, ✕ = schließen).
 
@@ -81,5 +82,5 @@ Fenster-Vorschau: beim Verweilen über einem Programm mit offenen Fenstern (Live
 
 ## Ideen für später
 
-Infobereich-Symbole (Tray), eigenes OXP-Startmenü, Fenster-Vorschau beim Drüberfahren,
+Eigenes OXP-Startmenü, Fenster-Vorschau beim Drüberfahren,
 Lautstärke-Regler, Zuschauerzahl/Follower, Dock auf weiteren Bildschirmen, Selbst-Update wie beim Mod-Dashboard.

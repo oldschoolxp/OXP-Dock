@@ -49,6 +49,32 @@ h3 { margin: 0 0 8px; font-size: 12px; color: var(--leise); font-weight: 600; le
 .lade { width: 22px; height: 22px; border: 2px solid var(--kante); border-top-color: var(--lila); border-radius: 50%; animation: dreh .8s linear infinite; }
 @keyframes dreh { to { transform: rotate(360deg); } }
 
+/* ---------- Hintergrundprogramme ---------- */
+.tray-panel { width: 254px; }
+.tray-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 5px; }
+.tray-header h3 { margin: 0; font-size: 13px; color: var(--text); letter-spacing: normal; text-transform: none; }
+.tray-list { max-height: 192px; margin: 0; padding: 1px 2px; overflow-y: auto; list-style: none; }
+.tray-row { display: flex; align-items: center; min-width: 0; border-radius: 7px; }
+.tray-row:hover, .tray-row:focus-within { background: var(--hover); }
+.tray-open { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; height: 31px; padding: 0 6px; border-radius: 7px; text-align: left; }
+.tray-open img, .tray-placeholder { flex: none; width: 18px; height: 18px; }
+.tray-open img { object-fit: contain; }
+.tray-placeholder { display: grid; place-items: center; color: var(--leise); }
+.tray-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-icon { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--leise); }
+.tray-icon svg { width: 14px; height: 14px; }
+.tray-icon:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.tray-icon:disabled { opacity: .5; }
+.tray-quit { opacity: 0; margin-right: 2px; }
+.tray-row:hover .tray-quit, .tray-row:focus-within .tray-quit { opacity: 1; }
+.tray-quit:hover:not(:disabled) { color: var(--live); }
+.tray-panel button:focus-visible { outline: 1px solid var(--lila); outline-offset: -1px; }
+.tray-status, .tray-confirm p { margin: 4px 6px 8px; }
+.tray-status { color: var(--leise); }
+.tray-confirm p { overflow-wrap: anywhere; }
+.tray-confirm > div { display: flex; justify-content: flex-end; gap: 6px; }
+.tray-stop { color: var(--live); }
+
 /* ---------- allgemeine Bausteine für Widget-Fenster ---------- */
 .zeile { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
 .zeile .fuell { flex: 1; }
