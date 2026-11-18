@@ -361,7 +361,10 @@ function placeDock() {
 function placeEntry(d) {
   const display = displayById(d.displayId);
   if (!display || d.win.isDestroyed()) return;
-  const bounds = screen.dipToScreenRect(null, display.bounds);
+  // physische Maße des Bildschirms genau von Windows (Electron rechnet bei Skalierung bis zu 2 px daneben)
+  const grob = screen.dipToScreenRect(null, display.bounds);
+  const bounds = win.monitorAt(grob.x + grob.width / 2, grob.y + grob.height / 2) || grob;
+  d.monitor = bounds;
   const h = dockHeight();
   try {
     win.reserveBottom(d.hwnd, bounds, Math.round(h * display.scaleFactor), APPBAR_MSG);
@@ -456,10 +459,11 @@ function isFullscreenOn(fg, d) {
   const cls = win.windowClass(fg);
   if (["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"].includes(cls)) return false;
   const r = win.windowRect(fg);
-  const disp = displayById(d.displayId);
-  if (!r || !disp) return false;
-  const b = screen.dipToScreenRect(null, disp.bounds);
-  return r.left <= b.x && r.top <= b.y && r.right >= b.x + b.width && r.bottom >= b.y + b.height;
+  // genaue Maße des Bildschirms, auf dem dieses Dock liegt – direkt von Windows
+  const b = d.monitor || win.monitorOfWindow(d.hwnd);
+  if (!r || !b) return false;
+  const t = 3; // kleine Toleranz (Fensterränder, Rundung)
+  return r.left <= b.x + t && r.top <= b.y + t && r.right >= b.x + b.width - t && r.bottom >= b.y + b.height - t;
 }
 
 async function pollWindows() {

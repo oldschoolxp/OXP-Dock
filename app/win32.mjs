@@ -355,3 +355,26 @@ export function thumbShow(dest, src, box) {
 export function thumbClear(id) {
   if (id) DwmUnregisterThumbnail(id);
 }
+
+// ---------- Genaue Bildschirmmaße direkt von Windows ----------
+// (Electron rechnet bei Skalierung manchmal 1–2 Pixel daneben – für die Vollbild-Erkennung zu ungenau)
+const MONITORINFO = koffi.struct("MONITORINFO", { cbSize: "uint32", rcMonitor: RECT, rcWork: RECT, dwFlags: "uint32" });
+const POINT = koffi.struct("POINT", { x: "int32", y: "int32" });
+const MonitorFromWindow = user32.func("intptr_t __stdcall MonitorFromWindow(intptr_t hwnd, uint32 flags)");
+const MonitorFromPoint = user32.func("intptr_t __stdcall MonitorFromPoint(POINT pt, uint32 flags)");
+const GetMonitorInfoW = user32.func("bool __stdcall GetMonitorInfoW(intptr_t mon, _Inout_ MONITORINFO *info)");
+
+function monitorRect(mon) {
+  const info = { cbSize: koffi.sizeof(MONITORINFO), rcMonitor: {}, rcWork: {}, dwFlags: 0 };
+  if (!mon || !GetMonitorInfoW(mon, info)) return null;
+  const r = info.rcMonitor;
+  return { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top };
+}
+/** Bildschirm (physische Pixel), auf dem ein Fenster liegt. */
+export function monitorOfWindow(hwnd) {
+  return monitorRect(Number(MonitorFromWindow(hwnd, 2))); // MONITOR_DEFAULTTONEAREST
+}
+/** Bildschirm (physische Pixel) an einem Punkt. */
+export function monitorAt(x, y) {
+  return monitorRect(Number(MonitorFromPoint({ x: Math.round(x), y: Math.round(y) }, 2)));
+}
