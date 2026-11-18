@@ -271,6 +271,44 @@ function ResolveKnownFolderPath([string]$value) {
   if ($base) { Join-Path $base $Matches[2] }
 }
 
+function NetworkStatus {
+  $profileByIndex = @{}
+  foreach ($profile in (Get-NetConnectionProfile)) {
+    $profileByIndex[[int]$profile.InterfaceIndex] = $profile
+  }
+  $connections = foreach ($adapter in (Get-NetAdapter | Where-Object { $_.ifOperStatus -eq 'Up' })) {
+    $profile = $profileByIndex[[int]$adapter.InterfaceIndex]
+    # IANA-InterfaceType 6 = Ethernet, 71 = IEEE 802.11. Virtuelle Adapter haben ein eigenes Symbol.
+    $kind = 'network'
+    if ($adapter.HardwareInterface -and $adapter.InterfaceType -eq 6) { $kind = 'ethernet' }
+    if ($adapter.HardwareInterface -and $adapter.InterfaceType -eq 71) { $kind = 'wifi' }
+    if (-not $profile -and $kind -eq 'network') { continue }
+
+    $domain = ''
+    $category = [string]$profile.NetworkCategory
+    if ($category -eq 'DomainAuthenticated') {
+      if (-not $script:networkDomain) {
+        try {
+          $computer = Get-CimInstance -ClassName Win32_ComputerSystem -Property PartOfDomain,Domain
+          if ($computer.PartOfDomain) { $script:networkDomain = $computer.Domain }
+        } catch {}
+      }
+      $domain = $script:networkDomain
+    }
+
+    @{
+      kind = $kind
+      adapter = [string]$adapter.Name
+      name = [string]$profile.Name
+      category = $category
+      domain = $domain
+      internet = if ($profile) { 'Internet' -in @($profile.IPv4Connectivity, $profile.IPv6Connectivity) }
+    }
+  }
+  # Physische Verbindungen zuerst. Unter ihnen hat eine Verbindung mit Internet Vorrang.
+  @{ connections = @($connections | Where-Object { $_ } | Sort-Object @{ Expression = { $_.kind -eq 'network' } }, @{ Expression = { [bool]$_.internet }; Descending = $true }, kind, name) }
+}
+
 function Handle($req) {
   $a = $req.args
   switch ($req.cmd) {
@@ -423,6 +461,7 @@ function Handle($req) {
       @{ cpu = @($groups | Sort-Object { -$_.cpu } | Select-Object -First 8); ram = @($groups | Sort-Object { -$_.ramMb } | Select-Object -First 8) }
     }
     'net' { $s = [OxpDock.Net]::Speed(); @{ down = $s[0]; up = $s[1] } }
+    'networkStatus' { NetworkStatus }
     'temperature' {
       $t = $null
       try { $z = Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction Stop | Where-Object { $_.Temperature -gt 0 } | Sort-Object Temperature -Descending | Select-Object -First 1; if ($z) { $t = [math]::Round($z.Temperature - 273.15) } } catch {}

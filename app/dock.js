@@ -20,7 +20,10 @@ const fensterAuf = (id, el) => {
 };
 $("search").addEventListener("click", () => fensterAuf("suche", $("search")));
 $("tray").addEventListener("click", () => fensterAuf("tray", $("tray")));
-$("quick").addEventListener("click", () => api.invoke("keys", "quick"));
+const quick = $("quick");
+quick.addEventListener("click", () => { hideTip(); api.invoke("keys", "quick"); });
+quick.addEventListener("focus", () => showTip(quick));
+quick.addEventListener("blur", () => { if (tipFor === quick) hideTip(); });
 $("clock").addEventListener("click", () => api.invoke("keys", "notifications"));
 $("desktop").addEventListener("click", () => api.invoke("keys", "desktop"));
 document.addEventListener("contextmenu", (e) => {
@@ -241,7 +244,14 @@ function showTip(el) {
     const target = el.querySelector("img, .fallback") || el;
     const r = target.getBoundingClientRect();
     const bar = $("bar").getBoundingClientRect();
-    tipEl.textContent = text;
+    tipEl.classList.toggle("netzwerk", el === quick);
+    if (el === quick) {
+      tipEl.replaceChildren(...text.split("\n").map((line) => {
+        const span = document.createElement("span");
+        span.textContent = line;
+        return span;
+      }));
+    } else tipEl.textContent = text;
     const half = Math.min(tipEl.offsetWidth / 2 || 60, 180);
     const x = Math.min(Math.max(r.left + r.width / 2, half + 6), innerWidth - half - 6);
     tipEl.style.left = x + "px";
@@ -272,6 +282,42 @@ api.on("mouse-left-bar", () => {
   hideTip();
   resetMagnify();
 });
+
+// ---------- Netzwerkstatus und Schnelleinstellungen ----------
+const netzNamen = { ethernet: "LAN (Kabel)", wifi: "WLAN", network: "Netzwerk" };
+const netzGlobus = '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>';
+const netzSymbole = {
+  ethernet: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4m-5 0h10"/>',
+  wifi: '<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1" class="fill"/>',
+  network: netzGlobus,
+  offline: '<path d="M9.8 3.3A9 9 0 0 1 20.7 14.2M3.4 9.4a9 9 0 0 0 11.2 11.2M3 12h9m3 0h6M4 4l16 16"/>',
+  unknown: netzGlobus,
+};
+
+function renderNetwork() {
+  const status = state.widgets.network;
+  const [connection, ...otherConnections] = status?.connections || [];
+  const kind = connection?.kind || (status?.unavailable ? "unknown" : "offline");
+  const clean = (name) => (name || "").replace(/\s+/g, " ").trim();
+  let lines = [status?.unavailable ? "Netzwerkstatus nicht verfügbar" : "Keine Netzwerkverbindung"];
+  if (connection) {
+    const name = clean(connection.name);
+    const domain = clean(connection.domain);
+    const category = { DomainAuthenticated: "Domänennetzwerk", Private: "Privates Netzwerk", Public: "Öffentliches Netzwerk" }[connection.category];
+    const access = connection.internet === true ? "Internet" : connection.internet === false ? "Kein Internetzugang" : "Verbunden";
+    lines = [`${netzNamen[kind]} · ${access}`];
+    const detail = domain ? `Domäne: ${domain}` : category;
+    const label = name && name.toLowerCase() !== domain.toLowerCase() ? name : "";
+    lines.push([label, detail].filter(Boolean).join(" · ") || clean(connection.adapter));
+    const second = otherConnections.find((item) => item.kind !== kind) || otherConnections[0];
+    if (second) lines.push(`Auch verbunden: ${netzNamen[second.kind]} · ${clean(second.name) || clean(second.adapter)}`);
+  }
+  quick.dataset.network = kind;
+  quick.querySelector("svg").innerHTML = netzSymbole[kind];
+  quick.dataset.tip = lines.filter(Boolean).join("\n");
+  quick.setAttribute("aria-label", lines.concat("Schnelleinstellungen (Win+A)").join(". "));
+  if (tipFor === quick) showTip(quick);
+}
 
 // ---------- Fenster-Vorschau ----------
 // Nach kurzem Verweilen über einem Symbol mit offenen Fenstern: Vorschau-Bilder im Popup.
@@ -536,7 +582,7 @@ api.on("windows", ({ list, foreground }) => { state.windows = list; state.foregr
 api.on("config", (c) => { state.config = c; applyLook(); renderWidgets(); applyMagnify(); });
 api.on("widget", ({ key, value }) => {
   state.widgets[key] = value;
-  ({ live: renderLive, stream: renderStream, claude: renderClaude, system: renderSystem, weather: renderWeather })[key]?.();
+  ({ live: renderLive, stream: renderStream, claude: renderClaude, system: renderSystem, weather: renderWeather, network: renderNetwork })[key]?.();
   OXPWidgets.datenDa(key);
 });
 setInterval(() => renderClaude(), 60_000); // Restzeit aktuell halten

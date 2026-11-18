@@ -51,6 +51,7 @@ body.vollbreit .spacer { flex: 1; min-width: 8px; }
 
 .icon-btn { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--leise); transition: background .2s ease-out, color .2s; }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
+#quick[data-network="ethernet"], #quick[data-network="wifi"], #quick[data-network="network"] { color: var(--text); }
 
 /* Programme */
 #apps { position: relative; display: flex; align-items: center; min-width: 0; height: 100%; overflow-x: clip; overflow-y: visible; overflow-clip-margin: 40px; }
@@ -96,6 +97,9 @@ body.drop #bar { border-color: var(--lila); box-shadow: 0 0 16px color-mix(in sr
 }
 #tip.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
 #tip.instant { transition: opacity .15s ease-out, transform .18s cubic-bezier(.34, 1.56, .64, 1); }
+#tip.netzwerk { width: max-content; max-width: min(360px, calc(100vw - 12px)); }
+#tip.netzwerk span { display: block; overflow: hidden; text-overflow: ellipsis; }
+#tip.netzwerk span + span { color: var(--leise); font-weight: 400; }
 
 /* Widgets */
 #widgets { display: flex; align-items: center; gap: 4px; }

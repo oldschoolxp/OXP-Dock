@@ -44,7 +44,7 @@ if (process.env.OXP_DOCK_PROFILE) {
 // Einstellungen immer im selben Ordner – egal ob installiert („OXP Dock“) oder im Entwicklungsmodus („oxp-dock“)
 app.setPath("userData", process.env.OXP_DOCK_DATA || path.join(app.getPath("appData"), "oxp-dock")); // OXP_DOCK_DATA nur zum Testen (frische Installation)
 const BASE_HEIGHT = 60; // DIP inklusive Rand bei 100 %
-const TIP_SPACE = 44; // durchklickbarer Platz über dem Dock für die Namens-Blasen beim Drüberfahren
+const TIP_SPACE = 64; // durchklickbarer Platz über dem Dock für auch mehrzeilige Namens-Blasen
 const APPBAR_MSG = 0x8000 + 0x51; // WM_APP + x
 const dockHeight = () => Math.round(BASE_HEIGHT * config.look.scale);
 const tipSpace = () => Math.round((TIP_SPACE + (config.look.magnify ? (config.look.magnifyLevel - 1) * 30 : 0)) * config.look.scale);
@@ -853,7 +853,24 @@ ipcMain.handle("widget-popup-refresh", async (_e, { id, req }) => {
 
 // ---------- Widget-Daten ----------
 
-const data = { live: null, stream: null, weather: null, system: null, claude: null };
+const data = { live: null, stream: null, weather: null, system: null, claude: null, network: null };
+
+let networkPending = false;
+async function refreshNetwork() {
+  if (networkPending) return;
+  networkPending = true;
+  let value;
+  try {
+    value = await systemhelfer.call("networkStatus", {}, 8000);
+  } catch {
+    value = { unavailable: true };
+  } finally {
+    networkPending = false;
+  }
+  if (JSON.stringify(value) === JSON.stringify(data.network)) return;
+  data.network = value;
+  send("widget", { key: "network", value });
+}
 
 function send(channel, payload) {
   for (const d of docks.values()) if (!d.win.isDestroyed()) d.win.webContents.send(channel, payload);
@@ -1353,6 +1370,8 @@ app.whenReady().then(() => {
   setInterval(refreshClaude, 5 * 60_000);
   refreshClaude();
   setInterval(refreshSystem, 2000);
+  refreshNetwork();
+  setInterval(refreshNetwork, 5000);
   setInterval(refreshLive, 60_000);
   setInterval(refreshStream, 5 * 60_000);
   setInterval(refreshWeather, 15 * 60_000);
