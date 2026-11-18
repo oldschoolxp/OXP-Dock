@@ -16,11 +16,12 @@ const version = pkg.version;
 const notizen = process.argv[2] || `OXP Dock ${version}`;
 const dist = path.join(root, "dist-installer");
 const exe = `OXP-Dock-Setup-${version}.exe`;
-const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+// npx braucht unter Windows die Shell, gh nicht (ohne Shell bleiben Leerzeichen und Klammern im Text heil)
+const run = (cmd, args, shell = false) => execFileSync(cmd, args, { cwd: root, stdio: "inherit", shell });
 
 console.log(`Baue OXP Dock ${version} …`);
 fs.rmSync(dist, { recursive: true, force: true });
-run("npx", ["electron-builder", "--win", "nsis", "--publish", "never"]);
+run("npx", ["electron-builder", "--win", "nsis", "--publish", "never"], true);
 
 const daten = fs.readFileSync(path.join(dist, exe));
 const sha512 = crypto.createHash("sha512").update(daten).digest("base64");
@@ -30,5 +31,5 @@ fs.writeFileSync(
 );
 
 console.log("Lege das GitHub-Release an …");
-run("gh", ["release", "create", `v${version}`, "--repo", "oldschoolxp/OXP-Dock", "--title", version, "--notes", JSON.stringify(notizen), path.join(dist, exe), path.join(dist, "latest.yml"), path.join(dist, `${exe}.blockmap`)]);
+run("gh", ["release", "create", `v${version}`, "--repo", "oldschoolxp/OXP-Dock", "--title", version, "--notes", notizen, path.join(dist, exe), path.join(dist, "latest.yml"), path.join(dist, `${exe}.blockmap`)]);
 console.log(`Fertig: Version ${version} ist veröffentlicht. Installierte Docks fragen beim nächsten Prüfen nach dem Update.`);
