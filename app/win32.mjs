@@ -35,6 +35,7 @@ const GetForegroundWindow = user32.func("intptr_t __stdcall GetForegroundWindow(
 const SetForegroundWindow = user32.func("bool __stdcall SetForegroundWindow(intptr_t hWnd)");
 const BringWindowToTop = user32.func("bool __stdcall BringWindowToTop(intptr_t hWnd)");
 const ShowWindow = user32.func("bool __stdcall ShowWindow(intptr_t hWnd, int cmd)");
+const SetWindowPos = user32.func("bool __stdcall SetWindowPos(intptr_t hwnd, intptr_t after, int32 x, int32 y, int32 width, int32 height, uint32 flags)");
 const PostMessageW = user32.func("bool __stdcall PostMessageW(intptr_t hWnd, uint32 msg, uintptr_t w, intptr_t l)");
 const GetWindowRect = user32.func("bool __stdcall GetWindowRect(intptr_t hWnd, _Out_ RECT *rect)");
 const FindWindowW = user32.func("intptr_t __stdcall FindWindowW(str16 cls, str16 title)");
@@ -56,6 +57,7 @@ const WS_EX_APPWINDOW = 0x40000;
 const WS_EX_NOACTIVATE = 0x08000000;
 const DWMWA_CLOAKED = 14;
 const SW_HIDE = 0, SW_SHOW = 5, SW_MINIMIZE = 6, SW_RESTORE = 9;
+const SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 const WM_CLOSE = 0x10;
 
 const ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABM_GETSTATE = 4, ABM_SETSTATE = 10;
@@ -128,6 +130,14 @@ export function foregroundWindow() {
 export function windowRect(hwnd) {
   const r = {};
   return GetWindowRect(hwnd, r) ? r : null;
+}
+
+/** Verschiebt das Dock an die Bildschirmkante in physischen Pixeln. */
+export function alignWindowBottom(hwnd, { x, bottom }) {
+  const r = windowRect(hwnd);
+  if (!r) return false;
+  if (r.left === x && r.bottom === bottom) return true;
+  return SetWindowPos(hwnd, 0, x, bottom - (r.bottom - r.top), 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 export function windowClass(hwnd) {

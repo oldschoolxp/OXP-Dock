@@ -392,12 +392,15 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   // Fenster ist um tipSpace höher als der reservierte Bereich – dieser obere Teil ist durchklickbar.
   const total = h + tipSpace();
   d.barRect = { x: display.bounds.x, y: display.bounds.y + display.bounds.height - h, width: display.bounds.width, height: h };
+  // Die Leiste liegt am Bildschirmrand. Ihre eigene AppBar verkleinert die Arbeitsfläche darüber.
+  d.nativeEdge = { x: bounds.x, bottom: bounds.y + bounds.height };
   d.win.setBounds({ x: display.bounds.x, y: display.bounds.y + display.bounds.height - total, width: display.bounds.width, height: total });
   d.win.webContents.setZoomFactor(config.look.scale);
   if (d.ready && !d.win.isVisible()) {
     d.win.showInactive();
     d.win.setAlwaysOnTop(true, "screen-saver");
   }
+  win.alignWindowBottom(d.hwnd, d.nativeEdge);
 }
 
 // Maus nur dort abfangen, wo die Leiste ist – darüber gehen Klicks an die Fenster dahinter.
@@ -448,6 +451,22 @@ function createDock(display) {
     // ABN_POSCHANGED – nur gelegentlich nachziehen, sonst lösen sich mehrere Docks gegenseitig endlos aus
     if (wParam.readUInt32LE(0) === 1 && Date.now() - (d.placedAt || 0) > 1500) placeEntry(d);
   });
+  // Windows kann ein Fenster nach einer Änderung der Arbeitsfläche von selbst verschieben.
+  const checkPosition = () => {
+    if (d.positionQueued) return;
+    d.positionQueued = true;
+    setImmediate(() => {
+      try {
+        if (!desktopPaused && !quitting && !d.hiddenFs && d.nativeEdge && !w.isDestroyed()) {
+          win.alignWindowBottom(d.hwnd, d.nativeEdge);
+        }
+      } finally {
+        d.positionQueued = false;
+      }
+    });
+  };
+  w.on("move", checkPosition);
+  w.on("resize", checkPosition);
   w.once("ready-to-show", () => {
     d.ready = true;
     placeEntry(d);
