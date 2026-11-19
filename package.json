@@ -1,6 +1,6 @@
 {
   "name": "oxp-dock",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "type": "module",
   "description": "OXP Dock – eigene Taskleiste mit Live-Widgets für OldschoolXP",
@@ -56,10 +56,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "oldschoolxp",
-        "repo": "OXP-Dock",
-        "releaseType": "release"
+        "provider": "generic",
+        "url": "https://updates.oldschoolxp.de/dock"
       }
     ]
   },

@@ -1,4 +1,4 @@
-// Selbst-Update über GitHub-Releases (öffentliches Projekt oldschoolxp/OXP-Dock).
+// Selbst-Update über den eigenen Cloudflare-Speicher (https://updates.oldschoolxp.de/dock).
 //
 // Ablauf: Beim Start (nach kurzer Pause) und alle 4 Stunden still nachsehen. Gibt es eine neue Version,
 // fragt das Dock „Jetzt aktualisieren? Ja / Nein“. Bei Ja wird geladen und danach automatisch neu gestartet.
@@ -26,7 +26,7 @@ function hinweisText(info) {
   const n = info?.releaseNotes;
   if (!n) return "";
   const t = Array.isArray(n) ? n.map((x) => x.note).join("\n") : String(n);
-  // GitHub liefert die Beschreibung als HTML
+  // Die Beschreibung kann HTML enthalten (frühere GitHub-Releases)
   return t.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 700);
 }
 
