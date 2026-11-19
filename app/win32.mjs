@@ -144,6 +144,10 @@ export function windowClass(hwnd) {
   return readText(GetClassNameW, hwnd);
 }
 
+export function isMaximized(hwnd) {
+  return !!IsZoomed(hwnd);
+}
+
 export function isFramedMaximized(hwnd) {
   return IsZoomed(hwnd) && (Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & WS_CAPTION) === WS_CAPTION;
 }

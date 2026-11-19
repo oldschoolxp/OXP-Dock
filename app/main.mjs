@@ -475,6 +475,15 @@ function createDock(display) {
     d.ready = true;
     placeEntry(d);
   });
+  // Wurde das Dock schon vor dem ersten Zeichnen versteckt (Vollbild beim Start, z. B. Remotedesktop),
+  // kommt „ready-to-show“ nie – dann bliebe die Leiste für immer unsichtbar.
+  w.webContents.once("did-finish-load", () =>
+    setTimeout(() => {
+      if (d.ready || w.isDestroyed()) return;
+      d.ready = true;
+      placeEntry(d);
+    }, 800),
+  );
   return d;
 }
 
@@ -508,11 +517,17 @@ function isFullscreenOn(fg, d) {
   if (!fg || isDockHwnd(fg)) return false;
   const cls = win.windowClass(fg);
   if (["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"].includes(cls)) return false;
-  // Ohne AppBar können auch normal maximierte Fenster bis zum Bildschirmrand reichen.
-  if (win.isFramedMaximized(fg)) return false;
   const r = win.windowRect(fg);
   // genaue Maße des Bildschirms, auf dem dieses Dock liegt – direkt von Windows
   const b = d.monitor || win.monitorOfWindow(d.hwnd);
+  // Remotedesktop (mstsc): maximiert = soll den ganzen Bildschirm bekommen. Bliebe die Leiste mit ihrer
+  // Reservierung, würde Windows das Fenster verkleinern und die Verbindung käme nie ins echte Vollbild.
+  if (cls === "TscShellContainerClass" && win.isMaximized(fg) && r && b) {
+    const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+    return cx >= b.x && cx < b.x + b.width && cy >= b.y && cy < b.y + b.height;
+  }
+  // Ohne AppBar können auch normal maximierte Fenster bis zum Bildschirmrand reichen.
+  if (win.isFramedMaximized(fg)) return false;
   if (!r || !b) return false;
   const t = 3; // kleine Toleranz (Fensterränder, Rundung)
   return r.left <= b.x + t && r.top <= b.y + t && r.right >= b.x + b.width - t && r.bottom >= b.y + b.height - t;
