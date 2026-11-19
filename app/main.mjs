@@ -371,7 +371,7 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   const bounds = win.monitorAt(grob.x + grob.width / 2, grob.y + grob.height / 2) || grob;
   d.monitor = bounds;
   const h = dockHeight();
-  if (fg) d.hiddenFs = isFullscreenOn(fg, d);
+  if (fg) d.hiddenFs = fullscreenState(d, fg);
   d.placedAt = Date.now();
   if (d.hiddenFs) {
     d.win.hide();
@@ -530,7 +530,36 @@ function isFullscreenOn(fg, d) {
   if (win.isFramedMaximized(fg)) return false;
   if (!r || !b) return false;
   const t = 3; // kleine Toleranz (Fensterränder, Rundung)
-  return r.left <= b.x + t && r.top <= b.y + t && r.right >= b.x + b.width - t && r.bottom >= b.y + b.height - t;
+  // Höhe großzügiger: Remotedesktop legt sein Vollbild auf Seitenbildschirmen mit versetzter Oberkante
+  // (z. B. 10 px zu hoch) an. Ein normal maximiertes Fenster ist um die Reservierung (≥ 40 px) kürzer.
+  const hoch = Math.min(r.bottom, b.y + b.height) - Math.max(r.top, b.y);
+  return r.left <= b.x + t && r.right >= b.x + b.width - t && hoch >= b.height - 16;
+}
+
+/** Vollbild auf dem Bildschirm dieses Docks? Merkt sich das Vollbild-Fenster, damit die Leiste nicht
+ *  wieder darüber erscheint, nur weil auf einem anderen Bildschirm geklickt wurde. */
+function fullscreenState(d, fg) {
+  if (isFullscreenOn(fg, d)) {
+    d.fsHwnd = fg;
+    return true;
+  }
+  // Auch eine Remotedesktop-Verbindung im Vollbild, die gerade nicht vorn ist (z. B. nach dem Start des Docks)
+  const rdp = windowsState.filter((w) => w.cls === "TscShellContainerClass").map((w) => w.hwnd);
+  const kandidaten = [d.fsHwnd, ...rdp].filter(Boolean);
+  if (!kandidaten.length) return false;
+  // Ein anderes Fenster auf DIESEM Bildschirm ist jetzt vorn → es liegt über dem Vollbild, Leiste wieder zeigen
+  const r = fg && !isDockHwnd(fg) ? win.windowRect(fg) : null;
+  const b = d.monitor;
+  const fgHier = r && b && !["Progman", "WorkerW"].includes(win.windowClass(fg)) && (r.left + r.right) / 2 >= b.x && (r.left + r.right) / 2 < b.x + b.width && (r.top + r.bottom) / 2 >= b.y && (r.top + r.bottom) / 2 < b.y + b.height;
+  if (!fgHier) {
+    const h = kandidaten.find((k) => win.isShownWindow(k) && isFullscreenOn(k, d));
+    if (h) {
+      d.fsHwnd = h;
+      return true;
+    }
+  }
+  d.fsHwnd = 0;
+  return false;
 }
 
 async function pollWindows() {
@@ -540,7 +569,7 @@ async function pollWindows() {
     const fg = win.foregroundWindow();
     if (fg && !isDockHwnd(fg)) lastForeground = fg;
     if (fg) for (const d of docks.values()) {
-      if (isFullscreenOn(fg, d) !== d.hiddenFs) placeEntry(d, fg);
+      if (fullscreenState(d, fg) !== d.hiddenFs) placeEntry(d, fg);
     }
     // Selbstkorrektur: Windows schiebt ein Dock manchmal ohne Move-Ereignis um die eigene Reservierung nach oben
     // (z. B. nach Neustart/Update auf einem Seitenbildschirm) – dann „schwebt“ die Leiste. Mit frisch gemessenem

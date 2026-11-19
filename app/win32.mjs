@@ -144,6 +144,11 @@ export function windowClass(hwnd) {
   return readText(GetClassNameW, hwnd);
 }
 
+/** Fenster existiert, ist sichtbar und nicht minimiert. */
+export function isShownWindow(hwnd) {
+  return !!hwnd && !!IsWindow(hwnd) && !!IsWindowVisible(hwnd) && !IsIconic(hwnd);
+}
+
 export function isMaximized(hwnd) {
   return !!IsZoomed(hwnd);
 }
