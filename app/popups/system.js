@@ -91,6 +91,115 @@
     { keys: ["radios", "audio"] },
   );
 
+  // ---------- Netzwerk-Menü (über dem Netzwerksymbol) ----------
+  const netzSvg = (d) => `<svg viewBox="0 0 24 24" style="width:16px;height:16px;flex:none">${d}</svg>`;
+  const balken = (s) => {
+    const n = s >= 75 ? 4 : s >= 50 ? 3 : s >= 25 ? 2 : 1;
+    return `<svg viewBox="0 0 24 24" style="width:16px;height:16px;flex:none">${[1, 2, 3, 4].map((i) => `<rect x="${i * 5 - 3}" y="${20 - i * 4}" width="3" height="${i * 4}" rx="1" style="fill:currentColor;stroke:none;opacity:${i <= n ? 1 : 0.25}"/>`).join("")}</svg>`;
+  };
+  const netzArten = { ethernet: "LAN (Kabel)", wifi: "WLAN", network: "Netzwerk" };
+  let netzOffen = null; // WLAN, für das gerade das Kennwortfeld offen ist
+  let netzMeldung = "";
+  A.add("netz", (k, d, w) => {
+    if (d.loading) {
+      k.innerHTML = `<div style="width:360px"><h3>Netzwerk</h3><p class="leise">Wird geladen …</p></div>`;
+      netzMeldung = "";
+      netzOffen = null;
+      w.neuLaden({ laden: true });
+      return;
+    }
+    const verb = d.network?.connections || [];
+    const radios = d.radios || [];
+    const a = d.audio || {};
+    const wifiRadio = radios.find((r) => r.kind === "WiFi");
+    const radio = (kind, label) => {
+      const x = radios.find((y) => y.kind === kind);
+      return x ? `<button class="kachel ${x.on ? "an" : ""}" data-radio="${kind}" data-on="${x.on ? 1 : 0}"><b>${label}</b><small>${x.on ? "an" : "aus"}</small></button>` : "";
+    };
+    const verbText = verb.length
+      ? verb
+          .map((c) => {
+            const zugang = c.internet === true ? "Internet" : c.internet === false ? "Kein Internetzugang" : "Verbunden";
+            const gleich = c.domain && (c.name || "").toLowerCase() === c.domain.toLowerCase();
+            const name = [gleich ? "" : c.name, c.domain ? "Domäne " + c.domain : ""].filter(Boolean).join(" · ");
+            return `<div class="eintrag an" style="cursor:default"><b>${w.esc(netzArten[c.kind] || "Netzwerk")}</b><span class="leise fuell" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${w.esc(name || c.adapter || "")}</span><small>${zugang}</small></div>`;
+          })
+          .join("")
+      : `<p class="leise">Keine Netzwerkverbindung</p>`;
+    const netze = d.wlan?.netze || [];
+    const wlanListe = !wifiRadio
+      ? ""
+      : !wifiRadio.on
+        ? `<p class="leise">WLAN ist ausgeschaltet.</p>`
+        : !netze.length
+          ? `<p class="leise">${d.wlan?.fehler ? "WLAN-Netze konnten nicht gelesen werden." : "Keine WLAN-Netze in der Nähe."}</p>`
+          : netze
+              .map((n) => {
+                const info = n.verbunden ? "Verbunden" : n.bekannt ? "Gespeichert" : n.offen ? "Offen" : "Gesichert";
+                const feld =
+                  netzOffen === n.ssid
+                    ? `<div class="zeile" style="padding:2px 4px 8px 32px">${
+                        n.offen || n.bekannt
+                          ? ""
+                          : `<input type="password" class="eingabe" id="wlanpw" placeholder="Netzwerkkennwort" autocomplete="off" spellcheck="false">`
+                      }<button class="knopf an" data-los="${w.esc(n.ssid)}">Verbinden</button></div>`
+                    : "";
+                return `<button class="eintrag ${n.verbunden ? "an" : ""}" data-wlan="${w.esc(n.ssid)}">${balken(n.signal)}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${w.esc(n.ssid)}</span><small class="leise">${info}</small></button>${feld}${
+                  n.verbunden && netzOffen === n.ssid ? `<div class="zeile" style="padding:2px 4px 8px 32px"><button class="knopf" id="trennen">Trennen</button></div>` : ""
+                }`;
+              })
+              .join("");
+    k.innerHTML = `<div style="width:360px">
+      <h3>Netzwerk</h3>
+      <div class="liste" style="max-height:none">${verbText}</div>
+      <div class="kacheln" style="margin-top:10px">${radio("WiFi", "WLAN")}${radio("Bluetooth", "Bluetooth")}${radio("MobileBroadband", "Mobilfunk")}
+        ${a.mic != null ? `<button class="kachel ${a.micMuted ? "an" : ""}" id="mikro"><b>Mikro stumm</b><small>${a.micMuted ? "an" : "aus"}</small></button>` : ""}</div>
+      ${a.volume != null ? `<div class="zeile" style="margin-top:6px"><button class="knopf ${a.muted ? "an" : ""}" id="stumm" title="Stumm">${netzSvg(a.muted ? '<path d="M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6"/>' : '<path d="M4 9h4l5-4v14l-5-4H4zM17 8a5 5 0 0 1 0 8"/>')}</button>
+        <input type="range" id="vol" min="0" max="100" value="${a.volume}" class="fuell"><b style="width:38px;text-align:right" id="volz">${a.volume}%</b></div>` : ""}
+      ${wifiRadio ? `<h3 style="margin-top:10px">WLAN-Netze</h3><div class="liste" style="max-height:300px">${wlanListe}</div>` : ""}
+      ${netzMeldung ? `<p class="leise" role="status" style="margin:8px 4px 0">${w.esc(netzMeldung)}</p>` : ""}
+      <div class="zeile" style="justify-content:space-between;margin-top:8px"><button class="knopf" id="neteinst">Netzwerkeinstellungen</button><button class="knopf" id="winmenue">Windows-Schnelleinstellungen</button></div>
+    </div>`;
+    const neu = () => w.neuLaden({ laden: true });
+    k.querySelectorAll("[data-radio]").forEach((b) => (b.onclick = async () => (await w.aktion("radio", { kind: b.dataset.radio, on: b.dataset.on !== "1" }), neu())));
+    const mikro = k.querySelector("#mikro");
+    if (mikro) mikro.onclick = async () => (await w.aktion("micMute", !a.micMuted), neu());
+    const vol = k.querySelector("#vol");
+    if (vol) {
+      regler(vol, (v) => w.aktion("volume", v));
+      vol.addEventListener("input", () => (k.querySelector("#volz").textContent = vol.value + "%"));
+      k.querySelector("#stumm").onclick = async () => (await w.aktion("mute", !a.muted), neu());
+    }
+    k.querySelectorAll("[data-wlan]").forEach(
+      (b) =>
+        (b.onclick = () => {
+          netzOffen = netzOffen === b.dataset.wlan ? null : b.dataset.wlan;
+          netzMeldung = "";
+          A.liste.netz(k, d, w);
+          w.neuZeichnen();
+          k.querySelector("#wlanpw")?.focus();
+        }),
+    );
+    const los = k.querySelector("[data-los]");
+    if (los) {
+      const verbinden = async () => {
+        const pw = k.querySelector("#wlanpw");
+        los.disabled = true;
+        los.textContent = "Verbinde …";
+        const r = await w.aktion("verbinden", { ssid: los.dataset.los, passwort: pw ? pw.value : undefined });
+        netzMeldung = r?.ok ? "" : r?.fehler || "Verbinden hat nicht geklappt.";
+        if (r?.ok) netzOffen = null;
+        neu();
+      };
+      los.onclick = verbinden;
+      k.querySelector("#wlanpw")?.addEventListener("keydown", (e) => e.key === "Enter" && verbinden());
+    }
+    const trennen = k.querySelector("#trennen");
+    if (trennen) trennen.onclick = async () => (await w.aktion("trennen"), (netzOffen = null), neu());
+    k.querySelector("#neteinst").onclick = () => (w.aktion("settings", "ms-settings:network"), w.schliessen());
+    k.querySelector("#winmenue").onclick = () => (w.schliessen(), w.aktion("windows"));
+  });
+
   // ---------- Prozesse ----------
   const prozesse = (art) => (k, d, w) => {
     const p = w.daten("procs") || {};

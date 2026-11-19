@@ -21,7 +21,14 @@ const fensterAuf = (id, el) => {
 $("search").addEventListener("click", () => fensterAuf("suche", $("search")));
 $("tray").addEventListener("click", () => fensterAuf("tray", $("tray")));
 const quick = $("quick");
-quick.addEventListener("click", () => { hideTip(); api.invoke("keys", "quick"); });
+// Klick: eigenes Netzwerk-Menü direkt über dem Symbol (das Windows-Menü sitzt immer am rechten Bildschirmrand).
+// Rechtsklick: das Windows-Menü (Win+A).
+quick.addEventListener("click", () => {
+  hideTip();
+  const r = quick.getBoundingClientRect();
+  api.invoke("widget-popup", { id: "netz", rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+});
+quick.addEventListener("contextmenu", (e) => { e.preventDefault(); hideTip(); api.invoke("keys", "quick"); });
 quick.addEventListener("focus", () => showTip(quick));
 quick.addEventListener("blur", () => { if (tipFor === quick) hideTip(); });
 const clock = $("clock");
@@ -321,7 +328,7 @@ function renderNetwork() {
   quick.dataset.network = kind;
   quick.querySelector("svg").innerHTML = netzSymbole[kind];
   quick.dataset.tip = lines.filter(Boolean).join("\n");
-  quick.setAttribute("aria-label", lines.concat("Schnelleinstellungen (Win+A)").join(". "));
+  quick.setAttribute("aria-label", lines.concat("Klick: Netzwerk-Menü, Rechtsklick: Windows-Schnelleinstellungen").join(". "));
   if (tipFor === quick) showTip(quick);
 }
 

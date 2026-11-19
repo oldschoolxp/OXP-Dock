@@ -168,6 +168,95 @@ export default function register(ctx, h) {
   ctx.popup("recent", async () => ({ files: await recentFiles() }));
   ctx.popup("apps", async () => ({ apps: await startMenuApps() }));
 
+  // ---------- Netzwerk-Menü (Klick auf das Netzwerksymbol, öffnet direkt darüber) ----------
+  ctx.popup("netz", async ({ laden }) => {
+    if (!laden) return { loading: true };
+    const [network, radios, audio, wlan] = await Promise.all([
+      sh.call("networkStatus", {}, 8000).catch(() => null),
+      sh.call("radios").catch(() => []),
+      sh.call("audio").catch(() => null),
+      wlanListe().catch(() => ({ netze: [], verbunden: null, fehler: true })),
+    ]);
+    return { network, radios, audio, wlan };
+  });
+  ctx.action("netz", async (a, v) => {
+    if (a === "radio") return sh.call("setRadio", { kind: v.kind, on: v.on }).catch((e) => e.message);
+    if (a === "volume") return sh.call("setVolume", { flow: 0, value: Math.max(0, Math.min(100, Number(v) || 0)) });
+    if (a === "mute") return sh.call("setMute", { flow: 0, value: !!v });
+    if (a === "micMute") return sh.call("setMute", { flow: 1, value: !!v });
+    if (a === "settings" && /^ms-settings:[a-z-]*$/.test(v)) return shell.openExternal(v);
+    if (a === "windows") return win.pressKeys([win.VK.WIN, 0x41]); // Win+A: die Schnelleinstellungen von Windows
+    if (a === "trennen") return netsh(["wlan", "disconnect"]).then(() => true);
+    if (a === "verbinden") return wlanVerbinden(v || {});
+  });
+
+  async function netsh(args) {
+    // Ausgabe als UTF-8 holen (sonst kommen Umlaute in Netzwerknamen verstümmelt an)
+    const befehl = "chcp 65001>nul & netsh " + args.map((x) => (/[\s&|<>^"]/.test(x) ? `"${x.replace(/"/g, '\\"')}"` : x)).join(" ");
+    return new Promise((res, rej) =>
+      execFile("cmd.exe", ["/d", "/s", "/c", befehl], { windowsHide: true, encoding: "utf8", timeout: 15_000, maxBuffer: 4 << 20 }, (err, out) => (err && !out ? rej(err) : res(out || ""))),
+    );
+  }
+  async function wlanListe() {
+    const [netzeText, profileText, ifText] = await Promise.all([netsh(["wlan", "show", "networks", "mode=bssid"]), netsh(["wlan", "show", "profiles"]), netsh(["wlan", "show", "interfaces"])]);
+    // gespeicherte Profile: Zeilen „    <Text> : <Name>“ nach der letzten Trennlinie
+    const profile = new Set();
+    const teile = profileText.split(/-{5,}/);
+    for (const z of (teile[teile.length - 1] || "").split(/\r?\n/)) {
+      const m = z.match(/^\s{4}\S.*?\s:\s(.+)$/);
+      if (m) profile.add(m[1].trim());
+    }
+    const verbunden = (ifText.match(/^\s*SSID\s*:\s*(.+)$/m) || [])[1]?.trim() || null;
+    const netze = [];
+    const bloecke = netzeText.split(/^SSID \d+ ?: ?/m).slice(1);
+    for (const b of bloecke) {
+      const zeilen = b.split(/\r?\n/);
+      const ssid = zeilen[0].trim();
+      if (!ssid) continue; // versteckte Netze
+      const auth = (zeilen[2] || "").split(":").slice(1).join(":").trim(); // Netzwerktyp, Authentifizierung, …
+      const signal = Math.max(0, ...[...b.matchAll(/:\s*(\d{1,3})%/g)].map((m) => +m[1]));
+      const offen = /^(offen|open)$/i.test(auth);
+      const art = offen ? "open" : /WPA3-Personal|WPA3-Pers/i.test(auth) ? "WPA3SAE" : /WPA2-Personal|WPA-Personal/i.test(auth) ? "WPA2PSK" : "andere";
+      if (!netze.some((n) => n.ssid === ssid)) netze.push({ ssid, signal, offen, art, auth, bekannt: profile.has(ssid), verbunden: ssid === verbunden });
+    }
+    netze.sort((x, y) => y.verbunden - x.verbunden || y.signal - x.signal);
+    return { netze: netze.slice(0, 14), verbunden };
+  }
+  async function wlanVerbinden({ ssid, passwort, art }) {
+    if (typeof ssid !== "string" || !ssid || ssid.length > 64) return { ok: false, fehler: "Ungültiges Netzwerk" };
+    const { netze } = await wlanListe();
+    const netz = netze.find((n) => n.ssid === ssid);
+    if (netz && !netz.bekannt) {
+      // neues Netz: Profil anlegen (offen oder WPA2/WPA3 mit Kennwort), dann verbinden
+      if (netz.art === "andere") {
+        shell.openExternal("ms-settings:network-wifi");
+        return { ok: false, fehler: "Dieses Netz braucht eine Firmen-Anmeldung – bitte in den Windows-Einstellungen verbinden." };
+      }
+      if (!netz.offen && (typeof passwort !== "string" || passwort.length < 8 || passwort.length > 63)) return { ok: false, fehler: "Das Kennwort muss 8 bis 63 Zeichen haben." };
+      const x = (s) => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]);
+      const sicherheit = netz.offen
+        ? "<authEncryption><authentication>open</authentication><encryption>none</encryption><useOneX>false</useOneX></authEncryption>"
+        : `<authEncryption><authentication>${art === "WPA3SAE" || netz.art === "WPA3SAE" ? "WPA3SAE" : "WPA2PSK"}</authentication><encryption>AES</encryption><useOneX>false</useOneX></authEncryption><sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>${x(passwort)}</keyMaterial></sharedKey>`;
+      const xml = `<?xml version="1.0"?><WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1"><name>${x(ssid)}</name><SSIDConfig><SSID><name>${x(ssid)}</name></SSID></SSIDConfig><connectionType>ESS</connectionType><connectionMode>auto</connectionMode><MSM><security>${sicherheit}</security></MSM></WLANProfile>`;
+      const datei = path.join(os.tmpdir(), `oxp-wlan-${process.pid}-${Date.now()}.xml`);
+      try {
+        fs.writeFileSync(datei, xml, { mode: 0o600 });
+        await netsh(["wlan", "add", "profile", `filename=${datei}`, "user=current"]);
+      } finally {
+        fs.rmSync(datei, { force: true }); // Kennwort nicht auf der Platte liegen lassen
+      }
+    }
+    const aus = await netsh(["wlan", "connect", `name=${ssid}`]);
+    // kurz warten, ob die Verbindung steht
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 800));
+      const jetzt = (await wlanListe().catch(() => ({}))).verbunden;
+      if (jetzt === ssid) return { ok: true };
+    }
+    return { ok: false, fehler: /erfolgreich|success/i.test(aus) ? "Verbindung wird noch aufgebaut …" : "Verbinden hat nicht geklappt. Stimmt das Kennwort?" };
+  }
+
+
   // ---------- Hilfsfunktionen ----------
   function langTag(id) {
     const map = { 0x0407: "de-DE", 0x0409: "en-US", 0x0809: "en-GB", 0x040c: "fr-FR", 0x0410: "it-IT", 0x0c0a: "es-ES", 0x0413: "nl-NL", 0x0415: "pl-PL", 0x0419: "ru-RU", 0x041f: "tr-TR", 0x0807: "de-CH", 0x0c07: "de-AT" };
