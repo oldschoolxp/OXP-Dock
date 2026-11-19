@@ -376,7 +376,10 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   if (d.hiddenFs) {
     d.win.hide();
     if (popupState?.entry === d) hidePopup();
-    // Auch die Windows-Arbeitsfläche freigeben, sonst kann Vollbild auf die kleinere Fläche zurückfallen.
+    // Remotedesktop im echten Vollbild (auch über mehrere Bildschirme): Platz NICHT freigeben – jede Änderung der
+    // Arbeitsfläche lässt die Verbindung ihr Vollbild neu aufbauen, dann landet sie nur noch auf einem Bildschirm.
+    if (d.fsHwnd && win.windowClass(d.fsHwnd) === "TscShellContainerClass" && !win.isMaximized(d.fsHwnd)) return;
+    // Sonst die Windows-Arbeitsfläche freigeben, damit Vollbild nicht auf die kleinere Fläche zurückfällt.
     try {
       win.releaseBottom(d.hwnd);
     } catch (e) {
