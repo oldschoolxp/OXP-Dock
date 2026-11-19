@@ -43,6 +43,9 @@ if (process.env.OXP_DOCK_PROFILE) {
 }
 // Einstellungen immer im selben Ordner – egal ob installiert („OXP Dock“) oder im Entwicklungsmodus („oxp-dock“)
 app.setPath("userData", process.env.OXP_DOCK_DATA || path.join(app.getPath("appData"), "oxp-dock")); // OXP_DOCK_DATA nur zum Testen (frische Installation)
+// Ohne Grafikkarten-Beschleunigung: spart den Grafikprozess (~150 MB). Die Leisten sind klein, das Zeichnen
+// schafft der Prozessor nebenbei. OXP_DOCK_GPU=1 schaltet sie zum Vergleichen wieder ein.
+if (process.env.OXP_DOCK_GPU !== "1") app.disableHardwareAcceleration();
 const BASE_HEIGHT = 60; // DIP inklusive Rand bei 100 %
 const TIP_SPACE = 64; // durchklickbarer Platz über dem Dock für auch mehrzeilige Namens-Blasen
 const APPBAR_MSG = 0x8000 + 0x51; // WM_APP + x
