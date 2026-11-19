@@ -111,7 +111,7 @@
       el.style.setProperty("--np-breite", c.option("breite", 200) + "px");
 
       // Hintergrund
-      const bild = m.thumb || (el._standbild?.titel === m.title ? el._standbild.url : null);
+      const bild = m.thumb || (el._standbild && el._standbild.titel === m.title ? el._standbild.url : null);
       // abgedunkelter Look nur, wenn wirklich ein Bild dahinter liegt (beim Video setzt npVideo das selbst)
       if (modus !== "video") el.classList.toggle("mit-hintergrund", modus === "cover" && !!bild);
       if (modus === "cover" && bild) {
