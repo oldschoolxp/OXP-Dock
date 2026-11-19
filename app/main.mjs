@@ -547,7 +547,9 @@ function fullscreenState(d, fg) {
     return true;
   }
   // Auch eine Remotedesktop-Verbindung im Vollbild, die gerade nicht vorn ist (z. B. nach dem Start des Docks)
-  const rdp = windowsState.filter((w) => w.cls === "TscShellContainerClass").map((w) => w.hwnd);
+  // gleich nach dem Start ist die Fensterliste noch leer – dann direkt nachsehen, bevor Platz reserviert wird
+  const liste = windowsState.length ? windowsState : win.listWindows(process.pid);
+  const rdp = liste.filter((w) => w.cls === "TscShellContainerClass").map((w) => w.hwnd);
   const kandidaten = [d.fsHwnd, ...rdp].filter(Boolean);
   if (!kandidaten.length) return false;
   // Ein anderes Fenster auf DIESEM Bildschirm ist jetzt vorn → es liegt über dem Vollbild, Leiste wieder zeigen

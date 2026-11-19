@@ -213,9 +213,12 @@ export function hideWindowsTaskbar() {
   const tray = trayWindows()[0];
   if (!tray) return null;
   const abd = { cbSize: koffi.sizeof(APPBARDATA), hWnd: tray, uCallbackMessage: 0, uEdge: 0, rc: { left: 0, top: 0, right: 0, bottom: 0 }, lParam: 0 };
-  if (savedState === null) savedState = Number(SHAppBarMessage(ABM_GETSTATE, abd));
+  const jetzt = Number(SHAppBarMessage(ABM_GETSTATE, abd));
+  if (savedState === null) savedState = jetzt;
   abd.lParam = ABS_AUTOHIDE | (savedState & ABS_ALWAYSONTOP);
-  SHAppBarMessage(ABM_SETSTATE, abd);
+  // nur ändern, wenn nötig – jedes ABM_SETSTATE meldet allen Programmen eine neue Arbeitsfläche
+  // (eine Remotedesktop-Verbindung über mehrere Bildschirme fällt dann auf einen Bildschirm zurück)
+  if ((jetzt & ABS_AUTOHIDE) !== ABS_AUTOHIDE) SHAppBarMessage(ABM_SETSTATE, abd);
   for (const t of trayWindows()) ShowWindow(t, SW_HIDE);
   return savedState;
 }
