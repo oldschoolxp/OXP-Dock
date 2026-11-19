@@ -523,6 +523,16 @@ async function pollWindows() {
     if (fg) for (const d of docks.values()) {
       if (isFullscreenOn(fg, d) !== d.hiddenFs) placeEntry(d, fg);
     }
+    // Selbstkorrektur: Windows schiebt ein Dock manchmal ohne Move-Ereignis um die eigene Reservierung nach oben
+    // (z. B. nach Neustart/Update auf einem Seitenbildschirm) – dann „schwebt“ die Leiste. Mit frisch gemessenem
+    // Bildschirm vergleichen und neu anlegen.
+    for (const d of docks.values()) {
+      if (d.hiddenFs || d.win.isDestroyed() || !d.win.isVisible() || Date.now() - (d.placedAt || 0) < 1500) continue;
+      const r = win.windowRect(d.hwnd);
+      if (!r) continue;
+      const m = win.monitorAt((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+      if (m && (Math.abs(r.bottom - (m.y + m.height)) > 1 || Math.abs(r.left - m.x) > 1)) placeEntry(d);
+    }
 
     const list = win.listWindows(process.pid);
     const neueSymbole = {};
