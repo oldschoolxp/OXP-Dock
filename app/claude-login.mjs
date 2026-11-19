@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { holen as fetch } from "./netz.mjs";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"; // öffentliche Kennung von Claude Code
 const TOKEN_URLS = ["https://console.anthropic.com/v1/oauth/token", "https://platform.claude.com/v1/oauth/token"];

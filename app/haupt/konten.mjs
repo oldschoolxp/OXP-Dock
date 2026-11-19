@@ -9,6 +9,7 @@ import tls from "node:tls";
 import { execFile } from "node:child_process";
 import { safeStorage } from "electron";
 import { claudeUsage } from "../claude-login.mjs";
+import { holen as fetch } from "../netz.mjs";
 
 export default function register(ctx, h) {
   const { shell, systemhelfer: sh, getJson, WEBSITE } = h;
@@ -135,7 +136,12 @@ export default function register(ctx, h) {
     }
   };
   async function claude() {
-    const u = await claudeUsage();
+    let u;
+    try {
+      u = await claudeUsage();
+    } catch (e) {
+      return { name: "Claude", error: e.message };
+    }
     if (u.error) return { name: "Claude", error: u.error };
     return {
       name: "Claude",
@@ -202,10 +208,18 @@ export default function register(ctx, h) {
     const b = j.balance_infos?.[0];
     return { name: "DeepSeek", balance: b ? `${b.total_balance} ${b.currency}` : "–" };
   }
+  let nochmalGeplant = null;
   ctx.provide("ai", 5 * 60_000, async () => {
     const e = einst("aiLimits", { claude: true, chatgpt: true, gemini: true });
     const jobs = [e.claude && claude(), e.chatgpt && chatgpt(), e.gemini && gemini(), deepseek()].filter(Boolean);
-    const res = await Promise.all(jobs.map((p) => p.catch((err) => ({ name: "?", error: err.message }))));
+    const res = await Promise.all(jobs.map((p) => p.catch((err) => ({ name: "KI", error: err.message }))));
+    // Netz gerade weg (WLAN-Wechsel, Aufwachen, VPN …)? Dann nicht 5 Minuten warten, sondern in 1 Minute nochmal
+    if (res.some((x) => x?.error && /Verbindung|Zeitüberschreitung|nicht erreichbar/.test(x.error)) && !nochmalGeplant) {
+      nochmalGeplant = setTimeout(() => {
+        nochmalGeplant = null;
+        ctx.refresh("ai");
+      }, 60_000);
+    }
     return { providers: res.filter(Boolean), settings: { claude: e.claude, chatgpt: e.chatgpt, gemini: e.gemini, deepseek: !!einst("aiLimits", {}).deepseek } };
   });
   ctx.action("aiLimits", async (a, v) => {
