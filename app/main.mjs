@@ -401,6 +401,10 @@ function placeEntry(d, fg = win.foregroundWindow()) {
     d.win.setAlwaysOnTop(true, "screen-saver");
   }
   win.alignWindowBottom(d.hwnd, d.nativeEdge);
+  // Windows verschiebt Seitenbildschirm-Docks manchmal kurz danach noch einmal (Arbeitsfläche ändert sich) – nachziehen
+  setTimeout(() => {
+    if (!d.win.isDestroyed() && !d.hiddenFs && !desktopPaused && !quitting) win.alignWindowBottom(d.hwnd, d.nativeEdge);
+  }, 400);
 }
 
 // Maus nur dort abfangen, wo die Leiste ist – darüber gehen Klicks an die Fenster dahinter.
@@ -531,7 +535,11 @@ async function pollWindows() {
       const r = win.windowRect(d.hwnd);
       if (!r) continue;
       const m = win.monitorAt((r.left + r.right) / 2, (r.top + r.bottom) / 2);
-      if (m && (Math.abs(r.bottom - (m.y + m.height)) > 1 || Math.abs(r.left - m.x) > 1)) placeEntry(d);
+      if (!m || (Math.abs(r.bottom - (m.y + m.height)) <= 1 && Math.abs(r.left - m.x) <= 1)) continue;
+      // direkt an die frisch gemessene Kante setzen (nicht über setBounds – das kann genau diese Verschiebung erzeugen)
+      d.monitor = m;
+      d.nativeEdge = { x: m.x, bottom: m.y + m.height };
+      win.alignWindowBottom(d.hwnd, d.nativeEdge);
     }
 
     const list = win.listWindows(process.pid);
