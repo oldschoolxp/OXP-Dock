@@ -46,7 +46,7 @@ app.setPath("userData", process.env.OXP_DOCK_DATA || path.join(app.getPath("appD
 // Ohne Grafikkarten-Beschleunigung: spart den Grafikprozess (~150 MB). Die Leisten sind klein, das Zeichnen
 // schafft der Prozessor nebenbei. OXP_DOCK_GPU=1 schaltet sie zum Vergleichen wieder ein.
 if (process.env.OXP_DOCK_GPU !== "1") app.disableHardwareAcceleration();
-const BASE_HEIGHT = 60; // DIP inklusive Rand bei 100 %
+const BASE_HEIGHT = 56; // DIP bei 100 %: Leiste 48 + je 4 Abstand oben und unten (≈ 1 mm auf einem 32-Zoll-4K-Bildschirm)
 const TIP_SPACE = 64; // durchklickbarer Platz über dem Dock für auch mehrzeilige Namens-Blasen
 const APPBAR_MSG = 0x8000 + 0x51; // WM_APP + x
 const dockHeight = () => Math.round(BASE_HEIGHT * config.look.scale);

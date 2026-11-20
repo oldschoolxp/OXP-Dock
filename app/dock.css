@@ -17,7 +17,7 @@
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
 body {
   font: 12px/1.2 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--text);
-  padding: 0 8px 6px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  padding: 0 8px 4px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
 }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
 svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
