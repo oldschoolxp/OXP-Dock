@@ -18,7 +18,14 @@
   let tickFn = null;
   setInterval(() => tickFn?.(), 1000);
   const mitTick = (fn) => (k, d, w) => {
+    const ansicht = A.aktuell;
     tickFn = () => {
+      // Popup inzwischen zu oder andere Ansicht (z. B. Fenster-Vorschau beim Drüberfahren über eine App):
+      // Takt beenden. Vorher zeichnete die Stoppuhr sich weiter sekündlich in die Vorschau hinein.
+      if (A.aktuell !== ansicht) {
+        tickFn = null;
+        return;
+      }
       if (document.activeElement?.tagName === "INPUT") return;
       fn(k, d, w);
     };
@@ -182,7 +189,7 @@
       k.innerHTML = `<div style="width:280px;text-align:center"><h3>Timer</h3>
         <div style="font-size:42px;font-weight:700;font-variant-numeric:tabular-nums">${dauer(rest)}</div>
         <div class="zeile" style="justify-content:center;flex-wrap:wrap">${[1, 3, 5, 10, 15, 30, 60].map((m) => `<button class="knopf" data-min="${m}">${m} Min.</button>`).join("")}</div>
-        <div class="zeile" style="justify-content:center"><button class="knopf an" id="los">${t.running ? "Pause" : "Start"}</button><button class="knopf" id="plus">+1 Min.</button><button class="knopf" id="reset">Zurück</button></div></div>`;
+        <div class="zeile" style="justify-content:center"><button class="knopf an" id="los">${t.running ? "Pause" : "Start"}</button><button class="knopf" id="plus">+1 Min.</button><button class="knopf" id="reset">Reset</button></div></div>`;
       k.querySelectorAll("[data-min]").forEach((b) => (b.onclick = async () => (await w.aktion("set", b.dataset.min * 60_000), w.aktion("start"))));
       k.querySelector("#los").onclick = () => w.aktion(t.running ? "pause" : "start");
       k.querySelector("#plus").onclick = () => w.aktion("add", 60_000);
@@ -200,7 +207,7 @@
       const jetzt = s.elapsed + (s.running ? Date.now() - s.startAt : 0);
       k.innerHTML = `<div style="width:260px;text-align:center"><h3>Stoppuhr</h3>
         <div style="font-size:42px;font-weight:700;font-variant-numeric:tabular-nums">${dauer(jetzt)}</div>
-        <div class="zeile" style="justify-content:center"><button class="knopf an" id="los">${s.running ? "Pause" : "Start"}</button><button class="knopf" id="runde">Runde</button><button class="knopf" id="reset">Zurück</button></div>
+        <div class="zeile" style="justify-content:center"><button class="knopf an" id="los">${s.running ? "Pause" : "Start"}</button><button class="knopf" id="runde">Runde</button><button class="knopf" id="reset">Reset</button></div>
         <div class="liste" style="max-height:140px">${s.laps.map((l, i) => `<div class="eintrag"><span class="leise">Runde ${s.laps.length - i}</span><b style="margin-left:auto">${dauer(l)}</b></div>`).join("")}</div></div>`;
       k.querySelector("#los").onclick = () => w.aktion(s.running ? "pause" : "start");
       k.querySelector("#runde").onclick = () => w.aktion("lap");

@@ -49,8 +49,13 @@ if (process.env.OXP_DOCK_GPU !== "1") app.disableHardwareAcceleration();
 const BASE_HEIGHT = 56; // DIP bei 100 %: Leiste 48 + je 4 Abstand oben und unten (≈ 1 mm auf einem 32-Zoll-4K-Bildschirm)
 const TIP_SPACE = 64; // durchklickbarer Platz über dem Dock für auch mehrzeilige Namens-Blasen
 const APPBAR_MSG = 0x8000 + 0x51; // WM_APP + x
-const dockHeight = () => Math.round(BASE_HEIGHT * config.look.scale);
-const tipSpace = () => Math.round((TIP_SPACE + (config.look.magnify ? (config.look.magnifyLevel - 1) * 30 : 0)) * config.look.scale);
+// Größe je Bildschirm: eigene Einstellung für diesen Bildschirm (z. B. schmaler Zweitbildschirm), sonst die allgemeine.
+const scaleOf = (displayId) => {
+  const eigene = displayId != null ? config.displayScale?.[String(displayId)] : null;
+  return typeof eigene === "number" ? eigene : config.look.scale;
+};
+const dockHeight = (displayId) => Math.round(BASE_HEIGHT * scaleOf(displayId));
+const tipSpace = (displayId) => Math.round((TIP_SPACE + (config.look.magnify ? (config.look.magnifyLevel - 1) * 30 : 0)) * scaleOf(displayId));
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.setAppUserModelId("de.oldschoolxp.dock");
@@ -70,6 +75,7 @@ const defaults = {
   widgetOrder: null, // Reihenfolge der Widgets in der Leiste (ids)
   widgetSettings: {}, // Einstellungen einzelner Widgets (z. B. Weltuhren, Kurse)
   widgetOptions: {}, // Optionen aus dem Reiter „Widget-Einstellungen“ (siehe widget-optionen.mjs)
+  displayScale: {}, // eigene Größe je Bildschirm (Bildschirm-ID -> 0.75 … 1.5), fehlt = allgemeine Größe
   look: { barColor: "#18151f", accent: "#8f3cff", opacity: 0.94, scale: 1, magnify: false, magnifyLevel: 1.6, previews: true, fullWidth: false },
   autoUpdate: true, // beim Start und alle paar Stunden nach neuen Versionen sehen
 };
@@ -305,11 +311,14 @@ async function iconFor(file) {
   if (iconCache.has(key)) return iconCache.get(key);
   const failedAt = iconFailed.get(key);
   if (failedAt && Date.now() - failedAt < 20_000) return null;
-  let url = null;
+  // 0. Store-Apps (Fotos, Rechner …): die .exe trägt nur ein leeres Standard-Symbol, das echte liegt als Bild im App-Paket
+  let url = storeAppIcon(file);
   // 1. Wie im Explorer über den Systemhelfer (scharf, 48 px, zuverlässig auch bei Edge & Co.)
-  try {
-    url = await systemhelfer.call("icon", { path: file, size: 48 }, 8000);
-  } catch {}
+  if (!url) {
+    try {
+      url = await systemhelfer.call("icon", { path: file, size: 48 }, 8000);
+    } catch {}
+  }
   // 2. Ersatz: Electron selbst – bleibt bei manchen Dateien (v. a. direkt nach dem Start) hängen
   if (!url) {
     try {
@@ -317,12 +326,53 @@ async function iconFor(file) {
       if (!img.isEmpty()) url = img.toDataURL();
     } catch (e) {
       console.error("Symbol fehlt (neuer Versuch später):", file, e.message);
-      iconFailed.set(key, Date.now());
-      return null;
     }
+  }
+  // Kein Symbol (z. B. Systemhelfer beim Windows-Start noch beschäftigt): nicht für immer merken, sondern später nochmal.
+  // Vorher blieb so ein Programm (z. B. Discord im Autostart) dauerhaft ohne Symbol.
+  if (!url) {
+    iconFailed.set(key, Date.now());
+    return null;
   }
   iconCache.set(key, url);
   return url;
+}
+
+/** Symbol einer Store-App aus ihrem Paket (AppxManifest → Square44x44Logo, beste vorhandene Größe). */
+function storeAppIcon(file) {
+  const m = /^(.*\\WindowsApps\\[^\\]+)\\/i.exec(file || "");
+  if (!m) return null;
+  try {
+    const paket = m[1];
+    const manifest = fs.readFileSync(path.join(paket, "AppxManifest.xml"), "utf8");
+    // die App, zu der die .exe gehört, sonst die erste
+    const exeRel = path.relative(paket, file).toLowerCase();
+    const apps = [...manifest.matchAll(/<Application\b[^>]*>[\s\S]*?<\/Application>/gi)].map((x) => x[0]);
+    const appXml = apps.find((a) => (/Executable="([^"]+)"/i.exec(a)?.[1] || "").toLowerCase() === exeRel) || apps[0] || manifest;
+    const logo = /Square44x44Logo="([^"]+)"/i.exec(appXml)?.[1] || /Square150x150Logo="([^"]+)"/i.exec(appXml)?.[1];
+    if (!logo) return null;
+    const dir = path.join(paket, path.dirname(logo));
+    const base = path.basename(logo, path.extname(logo)).toLowerCase();
+    const ext = path.extname(logo).toLowerCase();
+    const kandidaten = fs.readdirSync(dir).filter((f) => f.toLowerCase().startsWith(base + ".") && f.toLowerCase().endsWith(ext));
+    // Bevorzugt: targetsize-48 ohne Hintergrundplatte (unplated), dann die größte targetsize bis 64, dann scale-Varianten
+    const punkte = (f) => {
+      const n = f.toLowerCase();
+      const ts = Number(/targetsize-(\d+)/.exec(n)?.[1] || 0);
+      const sc = Number(/scale-(\d+)/.exec(n)?.[1] || 0);
+      if (/contrast-/.test(n)) return -1;
+      let p = ts ? 1000 - Math.abs(48 - ts) * 5 : sc ? 500 - Math.abs(200 - sc) : 100;
+      if (/altform-unplated/.test(n)) p += 50;
+      if (/altform-lightunplated/.test(n)) p -= 20;
+      return p;
+    };
+    const best = kandidaten.sort((a, b) => punkte(b) - punkte(a))[0];
+    if (!best || punkte(best) < 0) return null;
+    const img = nativeImage.createFromPath(path.join(dir, best));
+    return img.isEmpty() ? null : img.toDataURL();
+  } catch {
+    return null;
+  }
 }
 const iconFailed = new Map();
 
@@ -373,7 +423,7 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   const grob = screen.dipToScreenRect(null, display.bounds);
   const bounds = win.monitorAt(grob.x + grob.width / 2, grob.y + grob.height / 2) || grob;
   d.monitor = bounds;
-  const h = dockHeight();
+  const h = dockHeight(d.displayId);
   if (fg) d.hiddenFs = fullscreenState(d, fg);
   d.placedAt = Date.now();
   if (d.hiddenFs) {
@@ -396,12 +446,12 @@ function placeEntry(d, fg = win.foregroundWindow()) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
   // Fenster ist um tipSpace höher als der reservierte Bereich – dieser obere Teil ist durchklickbar.
-  const total = h + tipSpace();
+  const total = h + tipSpace(d.displayId);
   d.barRect = { x: display.bounds.x, y: display.bounds.y + display.bounds.height - h, width: display.bounds.width, height: h };
   // Die Leiste liegt am Bildschirmrand. Ihre eigene AppBar verkleinert die Arbeitsfläche darüber.
   d.nativeEdge = { x: bounds.x, bottom: bounds.y + bounds.height };
   d.win.setBounds({ x: display.bounds.x, y: display.bounds.y + display.bounds.height - total, width: display.bounds.width, height: total });
-  d.win.webContents.setZoomFactor(config.look.scale);
+  d.win.webContents.setZoomFactor(scaleOf(d.displayId));
   if (d.ready && !d.win.isVisible()) {
     d.win.showInactive();
     d.win.setAlwaysOnTop(true, "screen-saver");
@@ -659,13 +709,13 @@ function openPopup(view, payload, anchorRect, { sticky = false, key = view, entr
   if (!popup || popup.isDestroyed()) return;
   if (!entry || entry.win.isDestroyed()) return;
   const db = entry.win.getBounds();
-  const z = config.look.scale;
+  const z = scaleOf(entry.displayId);
   const anchor = { x: db.x + anchorRect.x * z, y: db.y + anchorRect.y * z, width: anchorRect.width * z, height: anchorRect.height * z };
   const display = view === "calendar" ? displayById(entry.displayId) : null;
   let limits = null;
   if (display) {
     const d = display.bounds;
-    const barTop = entry.barRect?.y ?? d.y + d.height - dockHeight();
+    const barTop = entry.barRect?.y ?? d.y + d.height - dockHeight(entry.displayId);
     // 8 DIP Bildschirmrand, 8 DIP Abstand zur Leiste und 24 CSS-Pixel für Kartenrand und Innenabstand.
     limits = { width: Math.floor((d.width - 16) / z) - 24, height: Math.floor((barTop - d.y - 16) / z) - 24 };
   }
@@ -679,14 +729,14 @@ function placePopup(width, height) {
   if (!popupState || !popup || popup.isDestroyed()) return;
   const d = displayById(popupState.entry?.displayId)?.bounds || screen.getPrimaryDisplay().bounds;
   const barRect = popupState.entry?.barRect;
-  const z = config.look.scale;
+  const z = scaleOf(popupState.entry?.displayId);
   const w = Math.ceil(width * z);
   const h = Math.ceil(height * z);
   const cx = popupState.anchor.x + popupState.anchor.width / 2;
   const x = Math.round(Math.min(Math.max(cx - w / 2, d.x + 8), d.x + d.width - w - 8));
   // über vergrößerten Symbolen (Mac-Effekt) entsprechend höher setzen
   const lift = popupState.key?.startsWith("preview:") && config.look.magnify ? Math.round((config.look.magnifyLevel - 1) * 30 * z) : 0;
-  const y = Math.round((barRect?.y ?? d.y + d.height - dockHeight()) - h - 8 - lift);
+  const y = Math.round((barRect?.y ?? d.y + d.height - dockHeight(popupState.entry?.displayId)) - h - 8 - lift);
   popupState.size = { x, y, width: w, height: h };
   popup.setBounds({ x, y, width: w, height: h });
   popup.webContents.setZoomFactor(z);
@@ -732,7 +782,7 @@ ipcMain.handle("bar-rect", (e, { left, width }) => {
   for (const d of docks.values()) {
     if (d.win.webContents !== e.sender) continue;
     const b = d.win.getBounds();
-    const z = config.look.scale;
+    const z = scaleOf(d.displayId);
     d.barX = { x: b.x + left * z, width: width * z };
   }
 });
@@ -893,7 +943,7 @@ ipcMain.handle("preview-rects", (e, boxes) => {
   if (!popup || e.sender !== popup.webContents || !popupState?.key?.startsWith("preview:") || !Array.isArray(boxes)) return;
   clearThumbs();
   const disp = displayById(popupState.entry?.displayId) || screen.getPrimaryDisplay();
-  const f = config.look.scale * disp.scaleFactor;
+  const f = scaleOf(popupState.entry?.displayId) * disp.scaleFactor;
   const dest = popupHwnd();
   const erlaubt = new Set(windowsState.map((w) => w.hwnd));
   for (const bx of boxes.slice(0, 6)) {
@@ -1329,7 +1379,18 @@ async function sendSettingsState() {
   if (!settingsWin || settingsWin.isDestroyed()) return;
   const pins = [];
   for (const p of config.pins) pins.push({ ...p, icon: (await iconFor(p.target)) || (await iconFor(p.path)) });
-  settingsWin.webContents.send("settings-state", { config: publicConfig(), pins, catalog: baukasten.catalog.map((w) => ({ ...w, options: WIDGET_OPTIONEN[w.id] || [] })), groups: GROUPS, version: app.getVersion() });
+  // Bildschirme für „Größe je Bildschirm“ (Hauptbildschirm zuerst)
+  const prim = screen.getPrimaryDisplay().id;
+  const displays = screen
+    .getAllDisplays()
+    .sort((a, b) => (b.id === prim) - (a.id === prim) || a.bounds.x - b.bounds.x)
+    .map((d, i) => ({
+      id: String(d.id),
+      name: `Bildschirm ${i + 1}${d.id === prim ? " (Haupt)" : ""}${d.label ? " · " + d.label : ""}`,
+      size: `${Math.round(d.size.width * d.scaleFactor)} × ${Math.round(d.size.height * d.scaleFactor)}`,
+      scale: typeof config.displayScale?.[String(d.id)] === "number" ? config.displayScale[String(d.id)] : null,
+    }));
+  settingsWin.webContents.send("settings-state", { config: publicConfig(), displays, pins, catalog: baukasten.catalog.map((w) => ({ ...w, options: WIDGET_OPTIONEN[w.id] || [] })), groups: GROUPS, version: app.getVersion() });
 }
 
 ipcMain.handle("settings-load", () => {
@@ -1368,6 +1429,14 @@ ipcMain.handle("settings-save", (_e, patch) => {
     }
   }
   if (patch.widgetOptionsReset && typeof patch.widgetOptionsReset === "string" && config.widgetOptions) delete config.widgetOptions[patch.widgetOptionsReset];
+  // eigene Größe für einen Bildschirm (scale: null = wieder die allgemeine Größe)
+  if (patch.displayScale && /^-?\d+$/.test(String(patch.displayScale.id))) {
+    const { id, scale } = patch.displayScale;
+    config.displayScale ||= {};
+    if (typeof scale === "number") config.displayScale[String(id)] = Math.min(1.5, Math.max(0.75, Math.round(scale * 20) / 20));
+    else delete config.displayScale[String(id)];
+    setTimeout(placeDock, 50);
+  }
   if (patch.widgetSetting && typeof patch.widgetSetting.id === "string") {
     config.widgetSettings[patch.widgetSetting.id] = patch.widgetSetting.value;
   }

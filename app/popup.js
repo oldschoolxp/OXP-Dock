@@ -12,6 +12,10 @@ window.OXPAnsichten = {
     this.liste[name] = fn;
     this.keys[name] = keys;
   },
+  /** Welche Ansicht gerade offen ist (null = Popup zu) – damit Sekunden-Takte nicht in eine andere Ansicht zeichnen. */
+  get aktuell() {
+    return aktuell;
+  },
 };
 
 let aktuell = null;

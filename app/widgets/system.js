@@ -224,7 +224,8 @@
     render(el, c) {
       const n = c.daten("net");
       if (!n) return false;
-      el.innerHTML = `${I.net}<div class="stack"><span class="klein">↓ ${rate(n.down)}</span><span class="klein">↑ ${rate(n.up)}</span></div>`;
+      // Feste Breite: sonst wackelt das Feld bei jeder neuen Zahl und schiebt alle Widgets daneben mit.
+      el.innerHTML = `${I.net}<div class="stack feste-breite"><span class="klein">↓ ${rate(n.down)}</span><span class="klein">↑ ${rate(n.up)}</span></div>`;
       el.dataset.tip = "Netzwerk: Download / Upload";
     },
     click: () => {},

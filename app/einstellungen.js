@@ -25,7 +25,8 @@ let gruppen = [];
 let reihenfolge = [];
 let ziehen = false; // Regler wird gerade bewegt
 let cfg = null;
-api.on("settings-state", ({ config, pins, catalog, groups, version }) => {
+api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) => {
+  if (!ziehen) bildschirmeZeichnen(displays || [], config);
   katalog = catalog || [];
   gruppen = groups || [];
   reihenfolge = config.widgetOrder || [];
@@ -56,6 +57,36 @@ api.on("settings-state", ({ config, pins, catalog, groups, version }) => {
   document.documentElement.style.setProperty("--lila", l.accent);
   werteZeigen();
 });
+
+// ---------- Größe je Bildschirm (nur bei mehreren Bildschirmen) ----------
+function bildschirmeZeichnen(displays, config) {
+  const box = $("bildschirme");
+  box.hidden = displays.length < 2 || config.allMonitors === false;
+  if (box.hidden) return;
+  const liste = $("bildschirmListe");
+  liste.innerHTML = "";
+  for (const d of displays) {
+    const eigen = typeof d.scale === "number";
+    const wert = Math.round((eigen ? d.scale : config.look.scale) * 100);
+    const zeile = document.createElement("div");
+    zeile.className = "row";
+    zeile.innerHTML = `<span>${esc(d.name)}<small>${esc(d.size)} · <span class="wert">${eigen ? wert + " %" : "wie oben (" + wert + " %)"}</span></small></span>
+      <span style="display:flex;align-items:center;gap:10px"><label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" class="eigen"${eigen ? " checked" : ""}>eigene</label>
+      <input type="range" class="groesse" min="75" max="150" step="5" value="${wert}"${eigen ? "" : " disabled"}></span>`;
+    const regler = zeile.querySelector(".groesse");
+    const haken = zeile.querySelector(".eigen");
+    const anzeige = zeile.querySelector(".wert");
+    const speichern = () => api.invoke("settings-save", { displayScale: { id: d.id, scale: haken.checked ? regler.value / 100 : null } });
+    haken.addEventListener("change", () => {
+      regler.disabled = !haken.checked;
+      anzeige.textContent = haken.checked ? regler.value + " %" : "wie oben (" + Math.round(config.look.scale * 100) + " %)";
+      speichern();
+    });
+    regler.addEventListener("input", () => ((ziehen = true), (anzeige.textContent = regler.value + " %")));
+    regler.addEventListener("change", () => ((ziehen = false), speichern()));
+    liste.append(zeile);
+  }
+}
 
 // ---------- Aussehen ----------
 function werteZeigen() {
