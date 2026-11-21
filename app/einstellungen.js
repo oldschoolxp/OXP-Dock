@@ -60,11 +60,19 @@ api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) 
 
 // ---------- Größe je Bildschirm (nur bei mehreren Bildschirmen) ----------
 function bildschirmeZeichnen(displays, config) {
-  const box = $("bildschirme");
-  box.hidden = displays.length < 2 || config.allMonitors === false;
-  if (box.hidden) return;
+  // Immer sichtbar, damit man die Funktion findet – bei nur einem Bildschirm bzw. abgeschaltetem
+  // „Auf allen Bildschirmen“ mit Hinweis statt Reglern.
+  $("bildschirme").hidden = false;
   const liste = $("bildschirmListe");
   liste.innerHTML = "";
+  const hinweis = (text) => {
+    const p = document.createElement("div");
+    p.className = "row";
+    p.innerHTML = `<span><small>${esc(text)}</small></span>`;
+    liste.append(p);
+  };
+  if (displays.length < 2) return hinweis("Gerade ist nur ein Bildschirm angeschlossen – dafür gilt die Größe oben. Sobald ein zweiter dran ist, stellst du hier für jeden Bildschirm eine eigene Größe ein.");
+  if (config.allMonitors === false) return hinweis("Das Dock läuft gerade nur auf dem Hauptbildschirm. Schalte unter Allgemein „Auf allen Bildschirmen“ ein, dann kannst du hier jedem Bildschirm eine eigene Größe geben.");
   for (const d of displays) {
     const eigen = typeof d.scale === "number";
     const wert = Math.round((eigen ? d.scale : config.look.scale) * 100);

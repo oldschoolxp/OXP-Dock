@@ -1589,8 +1589,9 @@ app.whenReady().then(() => {
     // Die eigene AppBar-Reservierung ändert die Arbeitsfläche, nicht die Bildschirmmaße.
     if (metrics.some((metric) => metric !== "workArea")) setTimeout(placeDock, 200);
   });
-  screen.on("display-added", () => setTimeout(placeDock, 500));
-  screen.on("display-removed", () => setTimeout(placeDock, 500));
+  // Bildschirm an- oder abgesteckt: Leisten neu setzen und offene Einstellungen („Größe je Bildschirm“) auffrischen
+  screen.on("display-added", () => setTimeout(() => (placeDock(), sendSettingsState()), 500));
+  screen.on("display-removed", () => setTimeout(() => (placeDock(), sendSettingsState()), 500));
 
   watchWindowsPins();
   setInterval(() => {
