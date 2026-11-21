@@ -493,8 +493,15 @@ function renderSystem() {
   const v = state.widgets.system;
   el.hidden = !state.config.widgets.system || !v;
   if (el.hidden) return;
-  el.innerHTML = (OXPopt("system", "cpu", true) ? meter("CPU", v.cpu) : "") + (OXPopt("system", "ram", true) ? meter("RAM", v.ram) : "");
-  el.dataset.tip = `Arbeitsspeicher: ${v.ramGb.toFixed(1)} von ${v.ramTotalGb.toFixed(1)} GB belegt`;
+  const gpu = OXPopt("system", "gpu", true) ? v.gpu : null;
+  el.innerHTML =
+    (OXPopt("system", "cpu", true) ? meter("CPU", v.cpu) : "") + (OXPopt("system", "ram", true) ? meter("RAM", v.ram) : "") + (gpu ? meter("GPU", gpu.pct) : "");
+  const zeilen = [`Arbeitsspeicher: ${v.ramGb.toFixed(1)} von ${v.ramTotalGb.toFixed(1)} GB belegt`];
+  if (gpu) {
+    const extra = [gpu.vramGb != null ? `Grafikspeicher ${gpu.vramGb.toFixed(1)} von ${gpu.vramTotalGb.toFixed(1)} GB` : "", gpu.temp != null ? `${gpu.temp} °C` : ""].filter(Boolean);
+    zeilen.push(`${gpu.name || "Grafikkarte"}: ${gpu.pct} %${extra.length ? " · " + extra.join(" · ") : ""}`);
+  }
+  el.dataset.tip = zeilen.join(" · ");
 }
 
 function weatherIcon(code, day) {

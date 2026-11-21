@@ -111,7 +111,9 @@ body.drop #bar { border-color: var(--lila); box-shadow: 0 0 16px color-mix(in sr
 button.widget:hover { background: var(--hover); border-color: var(--kante); }
 .widget .stack { display: flex; flex-direction: column; gap: 2px; text-align: left; }
 /* Für schnell wechselnde Zahlen (z. B. Netzwerk-Tempo): gleich breite Ziffern und Platz für den längsten Wert „↓ 1023 KB/s“. */
-.widget .stack.feste-breite { min-width: 10.5em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Breite in Zeichen der kleinen Schrift gemessen (vorher 10.5em der großen Schrift – gut doppelt so breit wie nötig). */
+.widget .stack.feste-breite { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.widget .stack.feste-breite .klein { min-width: 10.5ch; }
 .widget .klein { font-size: 10.5px; color: var(--leise); }
 .widget .gross { font-size: 12.5px; font-weight: 600; }
 .avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }

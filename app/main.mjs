@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import * as win from "./win32.mjs";
 import { WEBSITE, SUPABASE_URL, SUPABASE_ANON_KEY } from "./oeffentlich.mjs";
 import { createBaukasten, GROUPS } from "./baukasten.mjs";
@@ -105,15 +105,46 @@ function saveConfig() {
 
 // ---------- Angeheftete Programme ----------
 
-/** Gruppen-Schlüssel eines Fensters/Programms: Store-Apps nach Paketname, sonst Programmdatei. */
+/**
+ * Hilfsprogramm → Hauptprogramm. Manche Programme zeigen ihr Fenster über einen Helfer: Steam über
+ * „bin\cef\…\steamwebhelper.exe“. Wer das offene Fenster andockte, heftete den Helfer an – der startet allein nichts,
+ * also ließ sich Steam nach dem Schließen nicht mehr übers Symbol öffnen. Regel: „<name>(web)helper.exe“ gehört zu
+ * „<name>.exe“ im selben oder einem der 5 Ordner darüber, falls es die gibt.
+ */
+const hauptCache = new Map();
+function hauptProgramm(exe) {
+  if (!exe || !/\.exe$/i.test(exe)) return exe;
+  const key = exe.toLowerCase();
+  if (hauptCache.has(key)) return hauptCache.get(key);
+  let ergebnis = exe;
+  const m = /^(.+?)(?:web)?helper\.exe$/i.exec(path.basename(exe));
+  if (m) {
+    let dir = path.dirname(exe);
+    for (let i = 0; i < 6; i++) {
+      const kandidat = path.join(dir, m[1] + ".exe");
+      if (kandidat.toLowerCase() !== key && fs.existsSync(kandidat)) {
+        ergebnis = kandidat;
+        break;
+      }
+      const hoch = path.dirname(dir);
+      if (hoch === dir) break;
+      dir = hoch;
+    }
+  }
+  hauptCache.set(key, ergebnis);
+  return ergebnis;
+}
+
+/** Gruppen-Schlüssel eines Fensters/Programms: Store-Apps nach Paketname, sonst Programmdatei (Helfer → Hauptprogramm). */
 function groupKey(exe) {
   const m = /\\WindowsApps\\([^\\_]+)_/i.exec(exe || "");
-  return m ? "pkg:" + m[1].toLowerCase() : win.exeBaseName(exe);
+  return m ? "pkg:" + m[1].toLowerCase() : win.exeBaseName(hauptProgramm(exe));
 }
 
 /** Programm starten – Store-Apps und Windows-Apps über „shell:AppsFolder\…“. */
 function launchPin(p) {
   if (!p) return;
+  p = hauptProgramm(p);
   if (/^shell:/i.test(p)) spawn("explorer.exe", [p], { detached: true, stdio: "ignore", windowsHide: true }).unref();
   else shell.openPath(p);
 }
@@ -126,7 +157,11 @@ async function describeAppPin(appId, name) {
   if (pkg) match = "pkg:" + pkg[1].toLowerCase();
   else {
     try {
-      target = (await systemhelfer.call("resolveAppId", { appId })) || "";
+      // Nur echte Pfade übernehmen: Für manche Apps (z. B. Remotedesktopverbindung) kommt aus PowerShell ein leeres
+      // Objekt „{}“ statt nichts. Das brachte exeBaseName zum Absturz – und damit die ganze Übernahme angehefteter
+      // Apps, still bei jedem Versuch: In Windows angeheftete Store-Apps (Claude, Outlook …) kamen nie ins Dock.
+      const r = await systemhelfer.call("resolveAppId", { appId });
+      target = typeof r === "string" ? r : "";
     } catch {}
     match = target ? win.exeBaseName(target) : "app:" + appId.toLowerCase();
   }
@@ -160,6 +195,7 @@ async function windowsPinItems() {
 }
 
 function describePin(file) {
+  file = hauptProgramm(file);
   let target = file;
   let args = "";
   if (file.toLowerCase().endsWith(".lnk")) {
@@ -207,6 +243,17 @@ if (!config.pins) {
   config.pins = importWindowsPins();
   saveConfig();
 }
+// Früher angeheftete Hilfsprogramme (z. B. steamwebhelper.exe) einmalig auf das Hauptprogramm umstellen
+{
+  let geaendert = false;
+  config.pins = config.pins.map((p) => {
+    if (!p.path || !/\.exe$/i.test(p.path) || hauptProgramm(p.path) === p.path) return p;
+    geaendert = true;
+    return { ...describePin(p.path), ...(p.icon ? { icon: p.icon } : {}) };
+  });
+  config.pins = config.pins.filter((p, i, alle) => alle.findIndex((x) => x.match === p.match) === i);
+  if (geaendert) saveConfig();
+}
 
 // „An Taskleiste anheften“ / „Von Taskleiste lösen“ aus Windows-Menüs ans Dock weitergeben:
 // den Ordner beobachten und nur Änderungen übernehmen (was du im Dock selbst gelöst hast, bleibt gelöst).
@@ -248,7 +295,9 @@ async function syncWindowsAppPins() {
   let changed = false;
   const neu = !config.appPinsImported ? apps : knownWinApps ? apps.filter((x) => !knownWinApps.has(x.appId)) : [];
   for (const it of neu) {
-    const p = await describeAppPin(it.appId, it.name);
+    // eine einzelne App, die sich nicht beschreiben lässt, darf die übrigen nicht aufhalten
+    const p = await describeAppPin(it.appId, it.name).catch((e) => (console.error("Angeheftete App übersprungen:", it.appId, e.message), null));
+    if (!p) continue;
     if (config.pins.some((x) => x.match === p.match || x.appId === p.appId)) continue;
     // an die Stelle wie in Windows: hinter das vorherige Windows-Element, das schon im Dock ist
     let pos = config.pins.length;
@@ -288,8 +337,10 @@ async function syncWindowsAppPins() {
 }
 
 function watchWindowsPins() {
-  setTimeout(() => syncWindowsAppPins().catch(() => {}), 4000);
-  setInterval(() => syncWindowsAppPins().catch(() => {}), 60_000);
+  const appSync = () => syncWindowsAppPins().catch((e) => console.error("Windows-Anheftliste (Apps):", e.message));
+  setTimeout(appSync, 4000);
+  // alle 20 s statt jede Minute: in Windows angeheftete Apps erscheinen so fast sofort im Dock
+  setInterval(appSync, 20_000);
   try {
     fs.mkdirSync(WIN_PIN_DIR, { recursive: true });
     fs.watch(WIN_PIN_DIR, () => {
@@ -413,6 +464,8 @@ function placeDock() {
   for (const disp of wanted) if (!docks.has(disp.id)) createDock(disp);
   for (const d of docks.values()) placeEntry(d);
   dock = docks.get(screen.getPrimaryDisplay().id)?.win || [...docks.values()][0]?.win || null;
+  // Fenster, das Tastenkürzel bei einem Admin-Programm im Vordergrund nach vorn holt (siehe win32.pressKeys)
+  win.setOwnWindow((docks.get(screen.getPrimaryDisplay().id) || [...docks.values()][0])?.hwnd);
 }
 
 function placeEntry(d, fg = win.foregroundWindow()) {
@@ -571,6 +624,9 @@ let windowsState = [];
 /** Deckt das Vordergrundfenster den Bildschirm dieses Docks ganz ab (Spiel, Video im Vollbild)? */
 function isFullscreenOn(fg, d) {
   if (!fg || isDockHwnd(fg)) return false;
+  // Unsichtbare Überlagerungen (z. B. NVIDIA GeForce Overlay beim Öffnen der NVIDIA App) sind kein Vollbild –
+  // vorher verschwand das Dock dabei und kam erst mit der Windows-Taste zurück.
+  if (win.isOverlayWindow(fg)) return false;
   const cls = win.windowClass(fg);
   if (["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"].includes(cls)) return false;
   const r = win.windowRect(fg);
@@ -978,7 +1034,7 @@ const baukasten = createBaukasten({ send: (ch, p) => send(ch, p), getConfig: () 
   });
   w({ id: "claude", group: "konten", name: "Claude-Nutzungslimit", desc: "Sitzung + Woche. Liest deine Claude-Code-Anmeldung auf diesem PC und fragt damit nur bei Anthropic nach." });
   w({ id: "media", group: "wetter", name: "Musik-Tasten", desc: "Zurück / Pause / Weiter, zeigt Spotify-Titel" });
-  w({ id: "system", group: "system", name: "CPU & Arbeitsspeicher", desc: "Auslastung als Balken" });
+  w({ id: "system", group: "system", name: "CPU, RAM & GPU", desc: "Auslastung von Prozessor, Arbeitsspeicher und Grafikkarte als Balken" });
   w({ id: "weather", group: "wetter", name: "Wetter", desc: "Temperatur, Tageshoch/-tief (Ort in den Daten-Einstellungen)" });
 }
 
@@ -1218,8 +1274,48 @@ function refreshSystem() {
   lastCpu = now;
   const cpu = total > 0 ? Math.round(100 * (1 - idle / total)) : 0;
   const ram = Math.round(100 * (1 - os.freemem() / os.totalmem()));
-  data.system = { cpu, ram, ramGb: (os.totalmem() - os.freemem()) / 1024 ** 3, ramTotalGb: os.totalmem() / 1024 ** 3 };
+  data.system = { cpu, ram, ramGb: (os.totalmem() - os.freemem()) / 1024 ** 3, ramTotalGb: os.totalmem() / 1024 ** 3, gpu: gpuStand };
   send("widget", { key: "system", value: data.system });
+}
+
+// ---------- Grafikkarte (GPU) für das Widget „CPU & Arbeitsspeicher“ ----------
+// NVIDIA: nvidia-smi (schnell, mit Speicher und Temperatur). Sonst (AMD/Intel): Windows-Leistungsindikatoren
+// „GPU Engine … 3D“ über typeperf. Läuft nur, wenn das Widget in der Leiste ist und „GPU zeigen“ an ist.
+let gpuStand = null;
+let gpuLaeuft = false;
+let gpuQuelle = null; // "nvidia" | "windows" | "keine"
+const ausfuehren = (cmd, args, timeout) =>
+  new Promise((res) => execFile(cmd, args, { windowsHide: true, timeout, encoding: "utf8" }, (err, out) => res(err ? null : out || "")));
+async function refreshGpu() {
+  if (gpuLaeuft || !config.widgetOrder.includes("system") || config.widgetOptions?.system?.gpu === false || gpuQuelle === "keine") return;
+  gpuLaeuft = true;
+  try {
+    if (gpuQuelle !== "windows") {
+      const out = await ausfuehren("nvidia-smi", ["--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"], 4000);
+      const z = out?.split(/\r?\n/).find((l) => l.trim());
+      const t = z?.split(",").map((s) => s.trim());
+      if (t && t.length >= 4 && Number.isFinite(Number(t[1]))) {
+        gpuQuelle = "nvidia";
+        gpuStand = { pct: Math.round(Number(t[1])), name: t[0], vramGb: Number(t[2]) / 1024, vramTotalGb: Number(t[3]) / 1024, temp: Number.isFinite(Number(t[4])) ? Math.round(Number(t[4])) : null };
+        return;
+      }
+      if (gpuQuelle === "nvidia") return; // kurz nicht erreichbar – beim nächsten Mal wieder
+    }
+    // zwei Messungen im Abstand von 1 s (die erste ist bei Raten-Zählern immer 0)
+    const out = await ausfuehren("typeperf", ["\\GPU Engine(*engtype_3D)\\Utilization Percentage", "-sc", "2", "-si", "1"], 8000);
+    const zeilen = (out || "").split(/\r?\n/).filter((l) => l.startsWith('"') && !l.startsWith('"(PDH'));
+    const letzte = zeilen[zeilen.length - 1];
+    if (!letzte) {
+      gpuQuelle = "keine"; // keine Grafikkarten-Werte auf diesem PC – nicht weiter versuchen
+      gpuStand = null;
+      return;
+    }
+    gpuQuelle = "windows";
+    const summe = letzte.split(",").slice(1).reduce((s, v) => s + (Number(v.replace(/"/g, "")) || 0), 0);
+    gpuStand = { pct: Math.min(100, Math.round(summe)) };
+  } finally {
+    gpuLaeuft = false;
+  }
 }
 
 // ---------- Aktionen aus dem Dock ----------
@@ -1229,7 +1325,8 @@ function groupWindows(match) {
 }
 
 ipcMain.handle("hello", () => pushAll());
-ipcMain.handle("start-menu", () => win.pressKeys([win.VK.WIN]));
+// Startmenü: klappte nicht, solange ein Programm mit Administratorrechten (z. B. OBS) vorn war – siehe win32.startMenu
+ipcMain.handle("start-menu", () => win.startMenu());
 ipcMain.handle("keys", (_e, name) => {
   const map = { search: [win.VK.WIN, win.VK.S], quick: [win.VK.WIN, win.VK.A], notifications: [win.VK.WIN, win.VK.N], desktop: [win.VK.WIN, win.VK.D] };
   if (map[name]) win.pressKeys(map[name]);
@@ -1602,6 +1699,8 @@ app.whenReady().then(() => {
   setInterval(refreshClaude, 5 * 60_000);
   refreshClaude();
   setInterval(refreshSystem, 2000);
+  refreshGpu();
+  setInterval(refreshGpu, 3000);
   refreshNetwork();
   setInterval(refreshNetwork, 5000);
   setInterval(refreshLive, 60_000);

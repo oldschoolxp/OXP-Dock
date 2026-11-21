@@ -37,6 +37,7 @@ export const WIDGET_OPTIONEN = {
   system: [
     { key: "cpu", label: "Prozessor (CPU) zeigen", type: "toggle", default: true },
     { key: "ram", label: "Arbeitsspeicher (RAM) zeigen", type: "toggle", default: true },
+    { key: "gpu", label: "Grafikkarte (GPU) zeigen", type: "toggle", default: true },
   ],
   audio: [{ key: "prozent", label: "Prozentzahl zeigen", type: "toggle", default: true }],
   claude: [{ key: "woche", label: "Wochenlimit zeigen", type: "toggle", default: true }],

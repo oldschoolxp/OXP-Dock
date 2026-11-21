@@ -9,6 +9,7 @@ const user32 = koffi.load("user32.dll");
 const shell32 = koffi.load("shell32.dll");
 const kernel32 = koffi.load("kernel32.dll");
 const dwmapi = koffi.load("dwmapi.dll");
+const advapi32 = koffi.load("advapi32.dll");
 
 const RECT = koffi.struct("RECT", { left: "int32", top: "int32", right: "int32", bottom: "int32" });
 const APPBARDATA = koffi.struct("APPBARDATA", {
@@ -144,6 +145,21 @@ export function windowClass(hwnd) {
   return readText(GetClassNameW, hwnd);
 }
 
+/**
+ * Durchsichtige Überlagerung statt echtem Programmfenster? (NVIDIA GeForce Overlay, Xbox Game Bar, Discord-Overlay …)
+ * Die liegen unsichtbar über dem ganzen Bildschirm und dürfen nicht als „Vollbild-Spiel“ zählen.
+ */
+const OVERLAY_EXES = new Set(["nvidia overlay.exe", "nvidia share.exe", "gamebar.exe", "gamebarftserver.exe", "discordoverlayhost.exe", "overwolf.exe"]);
+export function isOverlayWindow(hwnd) {
+  if (!hwnd) return false;
+  const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+  if (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | 0x20)) return true; // Werkzeugfenster, nicht aktivierbar, durchklickbar (WS_EX_TRANSPARENT)
+  const pid = [0];
+  GetWindowThreadProcessId(hwnd, pid);
+  const exe = exeForPid(pid[0]);
+  return OVERLAY_EXES.has(exe.split("\\").pop().toLowerCase());
+}
+
 /** Fenster existiert, ist sichtbar und nicht minimiert. */
 export function isShownWindow(hwnd) {
   return !!hwnd && !!IsWindow(hwnd) && !!IsWindowVisible(hwnd) && !IsIconic(hwnd);
@@ -179,8 +195,65 @@ export function close(hwnd) {
 
 /** Tastenkombination drücken, z. B. [0x5B] = Windows-Taste, [0x5B, 0x41] = Win+A. */
 export function pressKeys(keys) {
+  // Ist gerade ein Programm mit Administratorrechten vorn (z. B. OBS), verwirft Windows die Tastendrücke.
+  // Dann erst das eigene Dock-Fenster nach vorn holen – das darf das Dock direkt nach einem Klick darauf.
+  try {
+    if (eigenesFenster && isElevatedWindow(GetForegroundWindow())) SetForegroundWindow(eigenesFenster);
+  } catch {}
   for (const k of keys) keybd_event(k, 0, 0, 0);
   for (const k of [...keys].reverse()) keybd_event(k, 0, 2, 0);
+}
+
+const OpenProcessToken = advapi32.func("bool __stdcall OpenProcessToken(intptr_t proc, uint32 access, _Out_ intptr_t *token)");
+const GetTokenInformation = advapi32.func("bool __stdcall GetTokenInformation(intptr_t token, int cls, _Out_ uint32 *info, uint32 len, _Out_ uint32 *ret)");
+
+/**
+ * Läuft das Programm dieses Fensters mit Administratorrechten (z. B. OBS „als Administrator“)? Dann verwirft Windows
+ * künstliche Tastendrücke des Docks (UIPI), solange es vorn ist – Windows-Taste, Win+A usw. kämen nie an.
+ */
+export function isElevatedWindow(hwnd) {
+  if (!hwnd) return false;
+  const pid = [0];
+  GetWindowThreadProcessId(hwnd, pid);
+  if (!pid[0]) return false;
+  const h = OpenProcess(0x1000, false, pid[0]); // PROCESS_QUERY_LIMITED_INFORMATION
+  if (!h) return true; // nicht mal lesen dürfen → höher eingestuft
+  try {
+    const token = [0];
+    if (!OpenProcessToken(h, 0x0008, token)) return true; // TOKEN_QUERY verweigert → erhöht
+    try {
+      const info = [0];
+      const ret = [0];
+      if (!GetTokenInformation(token[0], 20, info, 4, ret)) return false; // TokenElevation
+      return info[0] !== 0;
+    } finally {
+      CloseHandle(token[0]);
+    }
+  } finally {
+    CloseHandle(h);
+  }
+}
+
+/** Startmenü öffnen, ohne Tastendruck: Nachricht an die Windows-Taskleiste (WM_SYSCOMMAND / SC_TASKLIST). */
+export function openStartMenu() {
+  const tray = Number(FindWindowW("Shell_TrayWnd", null));
+  return tray ? PostMessageW(tray, 0x0112, 0xf130, 0) : false;
+}
+
+let eigenesFenster = 0;
+/** Das Dock-Fenster, das pressKeys bei Bedarf nach vorn holt. */
+export function setOwnWindow(hwnd) {
+  eigenesFenster = Number(hwnd) || 0;
+}
+
+/** Startmenü: normal per Windows-Taste; ist ein Admin-Programm vorn, über die Windows-Taskleiste. */
+export function startMenu() {
+  let erhoeht = false;
+  try {
+    erhoeht = isElevatedWindow(GetForegroundWindow());
+  } catch {}
+  if (erhoeht && openStartMenu()) return;
+  pressKeys([VK.WIN]);
 }
 
 export const VK = {
