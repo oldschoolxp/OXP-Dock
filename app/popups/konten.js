@@ -112,7 +112,15 @@
         k.innerHTML = `<div style="width:320px"><h3>Claude-Nutzung</h3><p class="leise">Wird geladen …</p></div>`;
         return;
       }
-      if (c.error) {
+      if (c.error && c.needsLogin) {
+        k.innerHTML = `<div style="width:340px"><h3>Claude-Nutzung</h3><p style="color:var(--live);margin:6px 0">${w.esc(c.error)}</p>
+          <p class="leise" style="font-size:12px">${
+            c.pending
+              ? "Im neuen Fenster wird Claude Code eingerichtet (falls nötig) und der Browser zur Anmeldung geöffnet. Sobald du angemeldet bist, erscheinen die Limits hier von selbst."
+              : "Ein Klick auf „Bei Claude anmelden“ öffnet ein Fenster: Falls nötig wird Claude Code von Anthropic eingerichtet, dann meldest du dich im Browser bei Claude an. Danach liest das Dock Sitzung und Woche automatisch aus."
+          }</p>
+          <div class="zeile" style="justify-content:space-between"><button class="knopf" id="web">Auf claude.ai ansehen</button><button class="knopf an" id="login">${c.pending ? "Fenster nochmal öffnen" : "Bei Claude anmelden"}</button></div></div>`;
+      } else if (c.error) {
         k.innerHTML = `<div style="width:340px"><h3>Claude-Nutzung</h3><p style="color:var(--live);margin:6px 0">${w.esc(c.error)}</p>
           <p class="leise" style="font-size:12px">Das Dock liest die Anmeldung von Claude Code auf diesem PC und erneuert sie bei Bedarf selbst. Klappt das nicht mehr, muss man sich einmal neu anmelden.</p>
           <div class="zeile" style="justify-content:space-between"><button class="knopf" id="web">Auf claude.ai ansehen</button><button class="knopf an" id="neu">Nochmal versuchen</button></div></div>`;
@@ -123,10 +131,18 @@
           <div class="zeile" style="justify-content:space-between"><button class="knopf" id="web">Auf claude.ai ansehen</button><button class="knopf an" id="neu">Aktualisieren</button></div></div>`;
       }
       k.querySelector("#web").onclick = () => (w.aktion("open"), w.schliessen());
-      k.querySelector("#neu").onclick = (e) => {
-        e.target.textContent = "…";
-        w.aktion("refresh");
-      };
+      const neu = k.querySelector("#neu");
+      if (neu)
+        neu.onclick = (e) => {
+          e.target.textContent = "…";
+          w.aktion("refresh");
+        };
+      const login = k.querySelector("#login");
+      if (login)
+        login.onclick = (e) => {
+          e.target.textContent = "…";
+          w.aktion("login");
+        };
     },
     { keys: ["claude"] },
   );

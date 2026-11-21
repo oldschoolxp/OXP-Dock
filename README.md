@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.2.4 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.2.5 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -18,7 +18,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 | Anheften | Windows-„An Taskleiste anheften“ / „Von Taskleiste lösen“ (Startmenü, Explorer) wirkt aufs Dock (Ordner `User PinnedTaskBar` wird beobachtet). Außerdem .exe/Verknüpfung aufs Dock ziehen oder Rechtsklick → „Am Dock anheften“. Symbole per Ziehen sortieren; offenes Programm in den angehefteten Bereich ziehen = anheften |
 | Drüberfahren | Namens-Blase über dem Symbol, Symbol hebt sich leicht. Optional Mac-Vergrößerung (Stärke einstellbar) |
 | Aussehen | Leistenfarbe, Akzentfarbe, 7 fertige Farbkombis, Deckkraft 20–100 %, Größe 75–150 % |
-| **Claude-Limit** | (aus, in Einstellungen einschalten) Sitzung (5 Std.) + Woche in %, Restzeit, Hochrechnung „bei diesem Tempo“. Liest `%USERPROFILE%.claude.credentials.json`, fragt `api.anthropic.com/api/oauth/usage`, erneuert abgelaufene Anmeldungen nicht selbst |
+| **Claude-Limit** | (aus, in Einstellungen einschalten) Sitzung (5 Std.) + Woche in %, Restzeit, Hochrechnung „bei diesem Tempo“. Liest `%USERPROFILE%.claude.credentials.json`, fragt `api.anthropic.com/api/oauth/usage`. Fehlt die Anmeldung: Klick aufs Widget → „Bei Claude anmelden“ öffnet ein Fenster, das Claude Code bei Bedarf mit dem offiziellen Anthropic-Installer einrichtet und `claude auth login` startet; danach erscheinen die Limits von selbst |
 | **Live** | eigener Kanal LIVE/OFFLINE + wie viele Partner live sind (Klick = Liste, öffnet Twitch) – Daten von `oldschoolxp.de/api/live` |
 | **Nächster Stream** | aus dem Streamplan (Supabase, nur lesen) mit Spiel-Bild und Countdown, Klick = nächste 5 Streams |
 | Musik | Zurück / Pause / Weiter (Medientasten), zeigt Spotify-Titel |

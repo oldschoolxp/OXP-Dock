@@ -11,7 +11,7 @@ import * as win from "./win32.mjs";
 import { WEBSITE, SUPABASE_URL, SUPABASE_ANON_KEY } from "./oeffentlich.mjs";
 import { createBaukasten, GROUPS } from "./baukasten.mjs";
 import { createSystemhelfer } from "./systemhelfer.mjs";
-import { claudeUsage } from "./claude-login.mjs";
+import { claudeUsage, anmeldungStarten, hatAnmeldung } from "./claude-login.mjs";
 import { WIDGET_OPTIONEN } from "./widget-optionen.mjs";
 import { initUpdater, jetztPruefen, updateZustand } from "./updater.mjs";
 import * as lizenz from "./lizenz.mjs";
@@ -924,6 +924,7 @@ const baukasten = createBaukasten({ send: (ch, p) => send(ch, p), getConfig: () 
   baukasten.ctx.action("claude", async (a) => {
     if (a === "refresh") await refreshClaude();
     if (a === "open") shell.openExternal("https://claude.ai/settings/usage");
+    if (a === "login") startClaudeLogin();
   });
   w({ id: "claude", group: "konten", name: "Claude-Nutzungslimit", desc: "Sitzung + Woche. Liest deine Claude-Code-Anmeldung auf diesem PC und fragt damit nur bei Anthropic nach." });
   w({ id: "media", group: "wetter", name: "Musik-Tasten", desc: "Zurück / Pause / Weiter, zeigt Spotify-Titel" });
@@ -1046,6 +1047,33 @@ async function refreshClaude() {
     data.claude = { error: "gerade nicht abrufbar" };
   }
   send("widget", { key: "claude", value: data.claude });
+}
+
+// Anmelden per Klick: Fenster öffnen und alle 3 s prüfen, ob die Abfrage klappt (höchstens 15 Min.), dann sofort anzeigen.
+let claudeLoginWatch = null;
+function startClaudeLogin() {
+  anmeldungStarten();
+  data.claude = { error: "Anmeldung läuft im neuen Fenster …", needsLogin: true, pending: true };
+  send("widget", { key: "claude", value: data.claude });
+  clearInterval(claudeLoginWatch);
+  const bis = Date.now() + 15 * 60_000;
+  let laeuft = false;
+  claudeLoginWatch = setInterval(async () => {
+    if (Date.now() > bis) {
+      clearInterval(claudeLoginWatch);
+      return refreshClaude();
+    }
+    // Bei abgelaufener Anmeldung liegt die Datei schon da, deshalb auf eine funktionierende Abfrage warten.
+    if (laeuft || !hatAnmeldung()) return;
+    laeuft = true;
+    const u = await claudeUsage().catch(() => null);
+    laeuft = false;
+    if (u && !u.error) {
+      clearInterval(claudeLoginWatch);
+      data.claude = u;
+      send("widget", { key: "claude", value: data.claude });
+    }
+  }, 3000);
 }
 
 async function getJson(url, headers = {}) {

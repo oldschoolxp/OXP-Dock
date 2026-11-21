@@ -37,7 +37,10 @@ export default function register(ctx, h) {
   ctx.provide("audio", 1500, () => sh.call("audio"));
   ctx.provide("battery", 20_000, () => win.battery());
   ctx.provide("brightness", 10_000, () => sh.call("brightness"));
-  ctx.provide("radios", 8000, () => sh.call("radios"));
+  // PowerShell macht aus einer Liste mit nur einem Eintrag (z. B. PC ohne WLAN, nur Bluetooth) ein einzelnes Objekt –
+  // dann stürzte das Netzwerk-Menü beim Zeichnen ab und blieb auf „Wird geladen …“ stehen.
+  const alsListe = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+  ctx.provide("radios", 8000, () => sh.call("radios").then(alsListe));
   ctx.provide("procs", 3000, () => sh.call("procs", {}, 20_000));
   ctx.provide("temp", 15_000, () => sh.call("temperature", {}, 20_000));
   ctx.provide("net", 2000, () => sh.call("net"));
@@ -173,7 +176,7 @@ export default function register(ctx, h) {
     if (!laden) return { loading: true };
     const [network, radios, audio, wlan] = await Promise.all([
       sh.call("networkStatus", {}, 8000).catch(() => null),
-      sh.call("radios").catch(() => []),
+      sh.call("radios").then(alsListe).catch(() => []),
       sh.call("audio").catch(() => null),
       wlanListe().catch(() => ({ netze: [], verbunden: null, fehler: true })),
     ]);

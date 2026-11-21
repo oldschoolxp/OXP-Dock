@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { holen as fetch } from "./netz.mjs";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"; // öffentliche Kennung von Claude Code
@@ -43,7 +44,7 @@ async function erneuern(alles) {
     if (!r.ok) {
       const txt = await r.text().catch(() => "");
       if (r.status === 400 || r.status === 401 || /invalid_grant/.test(txt)) {
-        return { error: "Die gespeicherte Anmeldung wird von Anthropic nicht mehr angenommen – einmal neu anmelden nötig", dauerhaft: true };
+        return { error: "Claude-Anmeldung abgelaufen – klicken zum Neu-Anmelden", dauerhaft: true, needsLogin: true };
       }
       letzterFehler = `Erneuern fehlgeschlagen (${r.status})`;
       continue;
@@ -74,18 +75,64 @@ async function erneuern(alles) {
 export async function claudeLogin({ force = false } = {}) {
   const alles = lesen();
   const o = alles?.claudeAiOauth;
-  if (!o?.accessToken) return { error: "Keine Claude-Anmeldung auf diesem PC gefunden" };
+  if (!o?.accessToken) return { error: "Nicht bei Claude angemeldet – klicken zum Anmelden", needsLogin: true };
   const bald = o.expiresAt && o.expiresAt < Date.now() + 5 * 60_000;
   if (!force && !bald) return { oauth: o };
-  if (!o.refreshToken) return { error: "Anmeldung abgelaufen und nicht erneuerbar" };
+  if (!o.refreshToken) return { error: "Claude-Anmeldung abgelaufen – klicken zum Neu-Anmelden", needsLogin: true };
   if (!laufend) laufend = erneuern(alles).finally(() => setTimeout(() => (laufend = null), 0));
   return laufend;
 }
 
-/** Nutzung abfragen: { session, week, plan, renewed } oder { error } */
+/** Gibt es eine gespeicherte Anmeldung (Datei mit Zugangsschlüssel)? */
+export function hatAnmeldung() {
+  return !!lesen()?.claudeAiOauth?.accessToken;
+}
+
+/**
+ * Anmelden per Klick: öffnet ein sichtbares PowerShell-Fenster, das (falls nötig) Claude Code mit dem offiziellen
+ * Installer von Anthropic einrichtet und dann `claude auth login` startet. Die Anmeldung selbst passiert im Browser
+ * bei Anthropic; Claude Code legt danach die Datei an, die das Dock liest. Das Dock fasst dabei keine Passwörter an.
+ */
+export function anmeldungStarten() {
+  const skript = `
+$Host.UI.RawUI.WindowTitle = 'OXP Dock - Claude-Anmeldung'
+try {
+  $c = (Get-Command claude -ErrorAction SilentlyContinue).Source
+  $lokal = Join-Path $env:USERPROFILE '.local\\bin\\claude.exe'
+  if (-not $c -and (Test-Path $lokal)) { $c = $lokal }
+  if (-not $c) {
+    Write-Host 'Claude Code ist noch nicht installiert - wird jetzt von Anthropic geladen (einmalig, ca. 1-2 Minuten) ...' -ForegroundColor Cyan
+    Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression
+    $c = $lokal
+  }
+  if (-not (Test-Path $c) -and -not (Get-Command $c -ErrorAction SilentlyContinue)) { throw 'Claude Code wurde nicht gefunden.' }
+  Write-Host ''
+  Write-Host 'Gleich oeffnet sich der Browser: dort bei Claude anmelden und bestaetigen.' -ForegroundColor Cyan
+  Write-Host ''
+  & $c auth login
+  Write-Host ''
+  Write-Host 'Fertig - das OXP Dock zeigt die Claude-Limits gleich an. Dieses Fenster schliesst sich in 10 Sekunden.' -ForegroundColor Green
+  Start-Sleep -Seconds 10
+} catch {
+  Write-Host ''
+  Write-Host ('Das hat nicht geklappt: ' + $_.Exception.Message) -ForegroundColor Red
+  Write-Host 'Fenster mit Enter schliessen.'
+  Read-Host | Out-Null
+}
+`;
+  const encoded = Buffer.from(skript, "utf16le").toString("base64");
+  // "start" öffnet ein eigenes, sichtbares Konsolenfenster (das Dock selbst hat keins).
+  spawn("cmd.exe", ["/c", "start", "", "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  }).unref();
+}
+
+/** Nutzung abfragen: { session, week, plan, renewed } oder { error, needsLogin } */
 export async function claudeUsage() {
   let login = await claudeLogin();
-  if (login.error) return { error: login.error };
+  if (login.error) return { error: login.error, needsLogin: !!login.needsLogin };
   const frage = (token) =>
     fetch("https://api.anthropic.com/api/oauth/usage", {
       headers: { Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20", "User-Agent": "oxp-dock" },
@@ -94,7 +141,7 @@ export async function claudeUsage() {
   let r = await frage(login.oauth.accessToken);
   if (r.status === 401) {
     login = await claudeLogin({ force: true });
-    if (login.error) return { error: login.error };
+    if (login.error) return { error: login.error, needsLogin: !!login.needsLogin };
     r = await frage(login.oauth.accessToken);
   }
   if (!r.ok) return { error: `Anthropic antwortet ${r.status}` };

@@ -109,7 +109,7 @@
       return;
     }
     const verb = d.network?.connections || [];
-    const radios = d.radios || [];
+    const radios = Array.isArray(d.radios) ? d.radios : d.radios ? [d.radios] : [];
     const a = d.audio || {};
     const wifiRadio = radios.find((r) => r.kind === "WiFi");
     const radio = (kind, label) => {
