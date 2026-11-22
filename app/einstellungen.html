@@ -11,6 +11,7 @@
     <div class="marke"><img src="assets/oxp-wuerfel.png" alt=""><div><b>OXP Dock</b><small>Einstellungen</small></div></div>
     <button class="reiter" data-tab="allgemein"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Allgemein</button>
     <button class="reiter" data-tab="aussehen"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.4-.7-.4-1.1 0-.9.8-1.7 1.7-1.7H16a6 6 0 0 0 6-6C22 6 17.5 2 12 2z"/></svg>Aussehen</button>
+    <button class="reiter" data-tab="startmenue"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 8h4M7 12h10M7 16h10"/></svg>Startmenü</button>
     <button class="reiter" data-tab="programme"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Programme</button>
     <button class="reiter" data-tab="widgets"><svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="3"/><path d="M6 12h3M13 12h5"/></svg>Widgets</button>
     <button class="reiter" data-tab="wopt"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Widget-Einstellungen</button>
@@ -27,7 +28,6 @@
       <div class="karte">
         <label class="row"><span>Windows-Taskleiste ausblenden<small>Kommt automatisch zurück, wenn das Dock beendet wird</small></span><input type="checkbox" class="schalter" id="hideWindowsTaskbar"></label>
         <label class="row"><span>Auf allen Bildschirmen<small>Eine Leiste pro Monitor</small></span><input type="checkbox" class="schalter" id="allMonitors"></label>
-        <label class="row"><span>Eigenes OXP-Startmenü<small>Klick auf den OXP-Würfel öffnet das OXP-Startmenü. Aus: das Windows-Startmenü. Die Windows-Taste öffnet immer das Windows-Startmenü.</small></span><input type="checkbox" class="schalter" id="ownStartMenu"></label>
         <label class="row"><span>Mit Windows starten<small>Nur in der installierten Version</small></span><input type="checkbox" class="schalter" id="autostart"></label>
       </div>
       <div class="karte">
@@ -66,6 +66,41 @@
     </section>
 
     <!-- ================= Programme ================= -->
+    <section class="tab" id="tab-startmenue">
+      <h1>Startmenü</h1>
+      <p class="unter">Das OXP-Startmenü öffnet sich mit einem Klick auf den OXP-Würfel. Die Windows-Taste öffnet weiterhin das Windows-Startmenü.</p>
+      <div class="karte">
+        <label class="row"><span>Eigenes OXP-Startmenü<small>Aus: Klick auf den OXP-Würfel öffnet das Windows-Startmenü</small></span><input type="checkbox" class="schalter" id="ownStartMenu"></label>
+      </div>
+      <div class="karte">
+        <h2>Position &amp; Größe</h2>
+        <div class="wahl" id="smPosition">
+          <button data-pos="mitte"><span class="mini mitte"><i></i></span>Mittig über dem Dock</button>
+          <button data-pos="wuerfel"><span class="mini links"><i></i></span>Über dem OXP-Würfel</button>
+        </div>
+        <label class="row"><span>Größe<small id="smGroesseVal"></small></span><input type="range" id="smGroesse" min="80" max="130" step="5"></label>
+        <label class="row"><span>Spalten bei „Angeheftet“<small id="smSpaltenVal"></small></span><input type="range" id="smSpalten" min="4" max="8" step="1"></label>
+      </div>
+      <div class="karte">
+        <h2>Inhalte</h2>
+        <label class="row"><span>Aufteilung<small>Wie viel Platz „Angeheftet“ und „Empfohlen“ bekommen – wie „Mehr Pins / Mehr Empfehlungen“ bei Windows</small></span>
+          <select class="eingabe" id="smLayout" style="width:200px"><option value="mehrPins">Mehr angeheftet</option><option value="standard">Standard</option><option value="mehrEmpfohlen">Mehr Empfehlungen</option></select></label>
+        <label class="row"><span>Beim Öffnen zeigen</span>
+          <select class="eingabe" id="smStartReiter" style="width:200px"><option value="pins">Angeheftet</option><option value="alle">Alle Apps</option></select></label>
+        <label class="row"><span>Zuletzt verwendete Apps empfehlen<small>Apps, die du über das Startmenü geöffnet hast</small></span><input type="checkbox" class="schalter" id="smZuletzt"></label>
+        <label class="row"><span>Zuletzt geöffnete Dateien empfehlen<small>Aus der Windows-Liste „Zuletzt verwendet“</small></span><input type="checkbox" class="schalter" id="smDateien"></label>
+        <label class="row"><span>Kontoname anzeigen</span><input type="checkbox" class="schalter" id="smKonto"></label>
+      </div>
+      <div class="karte">
+        <h2>Ordner neben Ein/Aus</h2>
+        <p class="unter" style="margin-top:0">Welche Schnellknöpfe unten im Startmenü stehen – wie bei Windows unter „Ordner“.</p>
+        <div id="smOrdner" class="sm-ordner-wahl"></div>
+      </div>
+      <div class="karte">
+        <label class="row"><span>Angeheftete Apps zurücksetzen<small>Stellt die Vorauswahl vom ersten Öffnen wieder her</small></span><button class="knopf" id="smReset">Zurücksetzen</button></label>
+      </div>
+    </section>
+
     <section class="tab" id="tab-programme">
       <h1>Programme</h1>
       <p class="unter">Angeheftete Programme. Ziehen zum Sortieren – geht auch direkt in der Leiste.</p>

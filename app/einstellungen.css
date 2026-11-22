@@ -76,6 +76,12 @@ input[type=range] { width: 260px; accent-color: var(--lila); }
 .mini i { display: block; height: 8px; border-radius: 3px; background: var(--lila); }
 .mini.mitte i { width: 55%; }
 .mini.voll i { width: 100%; }
+.mini.links { justify-content: flex-start; }
+.mini.links i { width: 22%; }
+.sm-ordner-wahl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sm-ordner-wahl label { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--kante); background: #191620; cursor: pointer; }
+.sm-ordner-wahl label:has(input:checked) { border-color: var(--lila); background: color-mix(in srgb, var(--lila) 12%, #191620); }
+.sm-ordner-wahl input { accent-color: var(--lila); }
 
 /* Programme */
 .pins { display: flex; flex-direction: column; gap: 2px; }

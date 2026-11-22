@@ -57,7 +57,43 @@ api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) 
   document.querySelectorAll("#breite button").forEach((b) => b.classList.toggle("an", (b.dataset.full === "1") === !!l.fullWidth));
   document.documentElement.style.setProperty("--lila", l.accent);
   werteZeigen();
+  startmenueZeigen(config.startMenu || {});
 });
+
+// ---------- Startmenü ----------
+const SM_ORDNER = [
+  ["dokumente", "Dokumente"], ["downloads", "Downloads"], ["bilder", "Bilder"], ["musik", "Musik"], ["videos", "Videos"],
+  ["persoenlich", "Persönlicher Ordner"], ["netzwerk", "Netzwerk"], ["explorer", "Explorer"], ["einstellungen", "Einstellungen"],
+];
+const sm = (patch) => api.invoke("settings-save", { startMenu: patch });
+function startmenueZeigen(s) {
+  document.querySelectorAll("#smPosition button").forEach((b) => b.classList.toggle("an", b.dataset.pos === (s.position || "mitte")));
+  if (!ziehen) {
+    $("smGroesse").value = Math.round((s.groesse || 1) * 100);
+    $("smSpalten").value = s.spalten || 6;
+  }
+  $("smGroesseVal").textContent = $("smGroesse").value + " %";
+  $("smSpaltenVal").textContent = $("smSpalten").value + " Spalten";
+  $("smLayout").value = s.layout || "standard";
+  $("smStartReiter").value = s.startReiter || "pins";
+  $("smZuletzt").checked = s.zuletzt !== false;
+  $("smDateien").checked = s.dateien !== false;
+  $("smKonto").checked = s.konto !== false;
+  const an = new Set(s.ordner || []);
+  $("smOrdner").innerHTML = SM_ORDNER.map(([k, n]) => `<label><input type="checkbox" data-ordner="${k}"${an.has(k) ? " checked" : ""}>${esc(n)}</label>`).join("");
+  $("smOrdner").querySelectorAll("[data-ordner]").forEach(
+    (c) => (c.onchange = () => sm({ ordner: [...$("smOrdner").querySelectorAll("[data-ordner]:checked")].map((x) => x.dataset.ordner) })),
+  );
+}
+document.querySelectorAll("#smPosition button").forEach((b) => (b.onclick = () => sm({ position: b.dataset.pos })));
+$("smGroesse").addEventListener("input", () => ((ziehen = true), ($("smGroesseVal").textContent = $("smGroesse").value + " %")));
+$("smGroesse").addEventListener("change", () => ((ziehen = false), sm({ groesse: $("smGroesse").value / 100 })));
+$("smSpalten").addEventListener("input", () => ((ziehen = true), ($("smSpaltenVal").textContent = $("smSpalten").value + " Spalten")));
+$("smSpalten").addEventListener("change", () => ((ziehen = false), sm({ spalten: Number($("smSpalten").value) })));
+$("smLayout").onchange = () => sm({ layout: $("smLayout").value });
+$("smStartReiter").onchange = () => sm({ startReiter: $("smStartReiter").value });
+for (const [id, key] of [["smZuletzt", "zuletzt"], ["smDateien", "dateien"], ["smKonto", "konto"]]) $(id).onchange = () => sm({ [key]: $(id).checked });
+$("smReset").onclick = () => sm({ pinsZuruecksetzen: true });
 
 // ---------- Größe je Bildschirm (nur bei mehreren Bildschirmen) ----------
 function bildschirmeZeichnen(displays, config) {

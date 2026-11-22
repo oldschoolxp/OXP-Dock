@@ -28,7 +28,20 @@
     web: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'),
     windows: svg('<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>'),
     oxp: svg('<rect x="3" y="15" width="18" height="5" rx="2"/><circle cx="12" cy="8" r="3"/>'),
+    musik: svg('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
+    videos: svg('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>'),
+    persoenlich: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+    netzwerk: svg('<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/>'),
+    datei: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'),
   };
+  // Schnellknöpfe unten (Einstellungen → Startmenü → „Ordner neben Ein/Aus“)
+  const ORDNER = {
+    dokumente: ["Dokumente", "ordner"], downloads: ["Downloads", "ordner"], bilder: ["Bilder", "ordner"], musik: ["Musik", "ordner"],
+    videos: ["Videos", "ordner"], persoenlich: ["Persönlicher Ordner", "ordner"], netzwerk: ["Netzwerk", "ordner"],
+    explorer: ["Explorer", "x"], einstellungen: ["Windows-Einstellungen", "x"],
+  };
+  // „Aufteilung“: Reihen für Angeheftet / Anzahl Empfehlungen – wie „Mehr Pins / Mehr Empfehlungen“ bei Windows
+  const AUFTEILUNG = { mehrPins: { reihen: 99, empfohlen: 4 }, standard: { reihen: 3, empfohlen: 6 }, mehrEmpfohlen: { reihen: 2, empfohlen: 10 } };
   const symbole = {}; // App-Kennung → Symbol (bleibt zwischen dem Öffnen erhalten)
   let reiter = "pins";
 
@@ -51,21 +64,24 @@
     const nachId = new Map(apps.map((a) => [a.appId, a]));
     let pins = (d.pins || []).filter((id) => nachId.has(id));
     let recent = (d.recent || []).filter((id) => nachId.has(id));
+    const s = d.einstellungen || {};
+    const dateien = s.dateien === false ? [] : d.dateien || [];
+    const aufteilung = AUFTEILUNG[s.layout] || AUFTEILUNG.standard;
+    const spalten = Math.min(8, Math.max(4, Number(s.spalten) || 6));
+    const ordnerWahl = (Array.isArray(s.ordner) ? s.ordner : ["dokumente", "downloads", "bilder", "explorer", "einstellungen"]).filter((o) => ORDNER[o]);
+    let alleAngeheftet = false; // „Alle anzeigen“, wenn die Aufteilung Reihen ausblendet
+    reiter = s.startReiter === "alle" ? "alle" : "pins";
 
-    k.innerHTML = `<div class="startm">
+    k.innerHTML = `<div class="startm" style="zoom:${Math.min(1.3, Math.max(0.8, Number(s.groesse) || 1))};--sm-spalten:${spalten}">
       <label class="sm-suche">${I.lupe}<input id="q" placeholder="Apps durchsuchen" autocomplete="off" spellcheck="false"></label>
       <nav class="sm-reiter" role="tablist">
         <button role="tab" data-r="pins">Angeheftet</button><button role="tab" data-r="alle">Alle Apps</button>
       </nav>
       <div class="sm-inhalt" id="inhalt"></div>
       <footer class="sm-fuss">
-        <button class="sm-konto" id="konto" title="Konto-Einstellungen"><span class="sm-avatar">${w.esc((d.benutzer || "?").charAt(0).toUpperCase())}</span><span>${w.esc(d.benutzer || "")}</span></button>
+        <button class="sm-konto" id="konto" title="Konto-Einstellungen"><span class="sm-avatar">${w.esc((d.benutzer || "?").charAt(0).toUpperCase())}</span>${s.konto === false ? "" : `<span>${w.esc(d.benutzer || "")}</span>`}</button>
         <div class="sm-schnell">
-          <button data-o="dokumente" title="Dokumente">${I.dokumente}</button>
-          <button data-o="downloads" title="Downloads">${I.downloads}</button>
-          <button data-o="bilder" title="Bilder">${I.bilder}</button>
-          <button data-x="explorer" title="Explorer">${I.explorer}</button>
-          <button data-x="einstellungen" title="Windows-Einstellungen">${I.zahnrad}</button>
+          ${ordnerWahl.map((o) => `<button ${ORDNER[o][1] === "x" ? "data-x" : "data-o"}="${o}" title="${ORDNER[o][0]}">${I[o === "einstellungen" ? "zahnrad" : o]}</button>`).join("")}
           <button id="power" title="Ein/Aus">${I.power}</button>
         </div>
       </footer>
@@ -115,13 +131,28 @@
     function zeile(a, extra = "") {
       return `<button class="sm-zeile" data-id="${w.esc(a.appId)}" title="${w.esc(a.name)}">${ico(a.appId)}<span class="sm-name">${w.esc(a.name)}</span>${extra}</button>`;
     }
+    const wann = (ms) => {
+      const min = Math.round((Date.now() - ms) / 60000);
+      if (min < 60) return min <= 1 ? "gerade eben" : `vor ${min} Min.`;
+      if (min < 24 * 60) return `vor ${Math.round(min / 60)} Std.`;
+      return new Date(ms).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+    };
+    function dateiZeile(f) {
+      return `<button class="sm-zeile" data-datei="${w.esc(f.file)}" title="${w.esc(f.file)}">${f.icon ? `<img class="sm-ico" src="${w.esc(f.icon)}" alt="">` : `<span class="sm-ico leer">${I.datei}</span>`}
+        <span class="sm-text"><span class="sm-name">${w.esc(f.name)}</span><small>${w.esc(wann(f.when))}</small></span></button>`;
+    }
     function zeigePins() {
       const angeheftet = pins.map((id) => nachId.get(id));
-      const zuletzt = recent.map((id) => nachId.get(id)).filter((a) => a);
+      const max = alleAngeheftet ? Infinity : aufteilung.reihen * spalten;
+      const sichtbar = angeheftet.slice(0, max);
+      // Empfohlen: zuletzt über das Startmenü geöffnete Apps, dann zuletzt geöffnete Dateien
+      const apps2 = s.zuletzt === false ? [] : recent.map((id) => nachId.get(id)).filter((a) => a);
+      const empfohlen = [...apps2.map((a) => zeile(a)), ...dateien.map(dateiZeile)].slice(0, aufteilung.empfohlen);
       inhalt.innerHTML = `
-        <div class="sm-abschnitt"><b>Angeheftet</b><span class="leise">Rechtsklick für mehr</span></div>
-        ${angeheftet.length ? `<div class="sm-gitter">${angeheftet.map(kachel).join("")}</div>` : `<p class="sm-hinweis">Noch nichts angeheftet. Unter „Alle Apps“ mit Rechtsklick → „An Start anheften“.</p>`}
-        ${zuletzt.length ? `<div class="sm-abschnitt"><b>Zuletzt verwendet</b></div><div class="sm-zuletzt">${zuletzt.map((a) => zeile(a)).join("")}</div>` : ""}`;
+        <div class="sm-abschnitt"><b>Angeheftet</b>${angeheftet.length > max ? `<button class="sm-link" id="mehrPins">Alle ${angeheftet.length} anzeigen ${I.rechts}</button>` : `<span class="leise">Rechtsklick für mehr</span>`}</div>
+        ${sichtbar.length ? `<div class="sm-gitter">${sichtbar.map(kachel).join("")}</div>` : `<p class="sm-hinweis">Noch nichts angeheftet. Unter „Alle Apps“ mit Rechtsklick → „An Start anheften“.</p>`}
+        ${empfohlen.length ? `<div class="sm-abschnitt"><b>Empfohlen</b></div><div class="sm-zuletzt">${empfohlen.join("")}</div>` : ""}`;
+      inhalt.querySelector("#mehrPins")?.addEventListener("click", (e) => (e.stopPropagation(), (alleAngeheftet = true), zeichnen()));
     }
     function zeigeAlle() {
       let html = "";
@@ -195,10 +226,21 @@
         return zeichnen();
       }
       if (e.target.closest(".sm-buchstabe")) return buchstabenRaster();
+      const datei = e.target.closest("[data-datei]")?.dataset.datei;
+      if (datei) return w.aktion("datei", datei), w.schliessen();
       const id = e.target.closest("[data-id]")?.dataset.id;
       if (id) starte(id);
     };
     inhalt.oncontextmenu = (e) => {
+      const dz = e.target.closest("[data-datei]");
+      if (dz) {
+        dz.classList.add("offen");
+        return OXPMenue.zeigen(e, [
+          { titel: dz.querySelector(".sm-name")?.textContent || "Datei" },
+          { text: "Öffnen", icon: I.oeffnen, tun: () => (w.aktion("datei", dz.dataset.datei), w.schliessen()) },
+          { text: "Dateispeicherort öffnen", icon: I.ordner, tun: () => (w.aktion("datei-ordner", dz.dataset.datei), w.schliessen()) },
+        ]);
+      }
       const el = e.target.closest("[data-id]");
       if (!el) return;
       const a = nachId.get(el.dataset.id);
@@ -219,7 +261,7 @@
           : null,
         { text: "Am Dock anheften", icon: I.dock, tun: () => w.aktion("pin-dock", { appId: a.appId, name: a.name }) },
         recent.includes(a.appId) && reiter === "pins" && !q.value.trim()
-          ? { text: "Aus „Zuletzt verwendet“ entfernen", icon: I.weg, tun: async () => ((recent = (await w.aktion("forget-recent", a.appId)) || recent), zeichnen()) }
+          ? { text: "Aus „Empfohlen“ entfernen", icon: I.weg, tun: async () => ((recent = (await w.aktion("forget-recent", a.appId)) || recent), zeichnen()) }
           : null,
         { trenner: true },
         { text: "Dateispeicherort öffnen", icon: I.ordner, tun: () => (w.aktion("folder", a.appId), w.schliessen()) },

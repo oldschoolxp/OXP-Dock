@@ -68,6 +68,8 @@ const defaults = {
   hideWindowsTaskbar: true,
   allMonitors: true, // Dock auf allen Bildschirmen
   ownStartMenu: true, // Klick auf den OXP-Würfel öffnet das OXP-Startmenü (false = Windows-Startmenü)
+  // Aussehen und Inhalte des OXP-Startmenüs (Einstellungen → Startmenü)
+  startMenu: { position: "mitte", groesse: 1, spalten: 6, layout: "standard", startReiter: "pins", zuletzt: true, dateien: true, konto: true, ordner: ["dokumente", "downloads", "bilder", "explorer", "einstellungen"] },
   autostart: false,
   channel: "oldschoolxptv",
   streamScope: "own", // "own" = nur eigener Kanal, "all" = alle Partner
@@ -88,7 +90,7 @@ if (!Array.isArray(config.widgetOrder)) {
 function loadConfig() {
   try {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    return { ...defaults, ...raw, widgets: { ...defaults.widgets, ...(raw.widgets || {}) }, look: { ...defaults.look, ...(raw.look || {}) } };
+    return { ...defaults, ...raw, widgets: { ...defaults.widgets, ...(raw.widgets || {}) }, look: { ...defaults.look, ...(raw.look || {}) }, startMenu: { ...defaults.startMenu, ...(raw.startMenu || {}) } };
   } catch {
     // Neue Installation: Grundeinrichtung aus standard.json (so, wie das Dock „ab Werk“ aussehen soll)
     let standard = {};
@@ -1142,7 +1144,7 @@ function pushAll() {
 
 function publicConfig() {
   const widgets = Object.fromEntries(config.widgetOrder.map((id) => [id, true]));
-  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, autoUpdate: config.autoUpdate !== false, autostart: config.autostart, streamScope: config.streamScope };
+  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, startMenu: config.startMenu, autoUpdate: config.autoUpdate !== false, autostart: config.autostart, streamScope: config.streamScope };
 }
 
 // ---------- Claude-Nutzungslimit ----------
@@ -1331,9 +1333,11 @@ function groupWindows(match) {
 ipcMain.handle("hello", () => pushAll());
 // Startmenü: klappte nicht, solange ein Programm mit Administratorrechten (z. B. OBS) vorn war – siehe win32.startMenu
 // Klick auf den OXP-Würfel: eigenes OXP-Startmenü über dem Würfel, oder (Einstellung aus) das Windows-Startmenü.
+// Position wie bei Windows 11: mittig über der Leiste (rect.mitte = sichtbarer Teil des Docks), sonst über dem Würfel.
 ipcMain.handle("start-menu", (e, rect) => {
   if (config.ownStartMenu === false || !rect) return win.startMenu();
-  return widgetPopup(e, { id: "start", rect, source: "start" });
+  const mitte = config.startMenu?.position !== "wuerfel" && rect.mitte ? rect.mitte : null;
+  return widgetPopup(e, { id: "start", rect: mitte || rect, source: "start" });
 });
 ipcMain.handle("keys", (_e, name) => {
   const map = { search: [win.VK.WIN, win.VK.S], quick: [win.VK.WIN, win.VK.A], notifications: [win.VK.WIN, win.VK.N], desktop: [win.VK.WIN, win.VK.D] };
@@ -1531,6 +1535,19 @@ ipcMain.handle("settings-save", (_e, patch) => {
   if (typeof patch.autostart === "boolean") config.autostart = patch.autostart;
   if (typeof patch.autoUpdate === "boolean") config.autoUpdate = patch.autoUpdate;
   if (typeof patch.ownStartMenu === "boolean") config.ownStartMenu = patch.ownStartMenu;
+  if (patch.startMenu && typeof patch.startMenu === "object") {
+    const s = patch.startMenu;
+    const m = (config.startMenu = { ...defaults.startMenu, ...(config.startMenu || {}) });
+    if (s.position === "mitte" || s.position === "wuerfel") m.position = s.position;
+    if (typeof s.groesse === "number") m.groesse = Math.min(1.3, Math.max(0.8, Math.round(s.groesse * 20) / 20));
+    if (typeof s.spalten === "number") m.spalten = Math.min(8, Math.max(4, Math.round(s.spalten)));
+    if (["mehrPins", "standard", "mehrEmpfohlen"].includes(s.layout)) m.layout = s.layout;
+    if (s.startReiter === "pins" || s.startReiter === "alle") m.startReiter = s.startReiter;
+    for (const k of ["zuletzt", "dateien", "konto"]) if (typeof s[k] === "boolean") m[k] = s[k];
+    const ORDNER = ["dokumente", "downloads", "bilder", "musik", "videos", "persoenlich", "netzwerk", "explorer", "einstellungen"];
+    if (Array.isArray(s.ordner)) m.ordner = ORDNER.filter((o) => s.ordner.includes(o));
+    if (s.pinsZuruecksetzen) delete config.startPins; // beim nächsten Öffnen neu vorbelegt
+  }
   if (typeof patch.allMonitors === "boolean" && patch.allMonitors !== config.allMonitors) {
     config.allMonitors = patch.allMonitors;
     setTimeout(placeDock, 100);

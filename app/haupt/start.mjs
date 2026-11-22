@@ -15,7 +15,7 @@ export default function register(ctx, h) {
   const appStart = (appId) => "shell:AppsFolder\\" + appId;
   const starte = (appId) => spawn("explorer.exe", [appStart(appId)], { detached: true, stdio: "ignore", windowsHide: true }).unref();
   const cfg = () => h.config();
-  const ordner = { dokumente: "Documents", downloads: "Downloads", bilder: "Pictures", musik: "Music", videos: "Videos" };
+  const ordner = { dokumente: "Documents", downloads: "Downloads", bilder: "Pictures", musik: "Music", videos: "Videos", persoenlich: "" };
 
   ctx.popup("start", async () => {
     let apps = [];
@@ -36,7 +36,15 @@ export default function register(ctx, h) {
         .map((a) => a.appId);
       h.saveConfig();
     }
-    return { apps, pins: c.startPins || [], recent: c.startRecent || [], benutzer: os.userInfo().username };
+    const einstellungen = c.startMenu || {};
+    // zuletzt geöffnete Dateien (Windows-Liste „Zuletzt verwendet“), nur wenn gewünscht
+    let dateien = [];
+    if (einstellungen.dateien !== false) {
+      try {
+        dateien = ((await h.popupData("recent", {}))?.files || []).slice(0, 10);
+      } catch {}
+    }
+    return { apps, pins: c.startPins || [], recent: c.startRecent || [], dateien, benutzer: os.userInfo().username, einstellungen };
   });
 
   async function exeVon(appId) {
@@ -97,7 +105,14 @@ export default function register(ctx, h) {
       return;
     }
     if (a === "uninstall") return shell.openExternal("ms-settings:appsfeatures");
-    if (a === "ordner" && ordner[v]) return shell.openPath(path.join(os.homedir(), ordner[v]));
+    if (a === "ordner" && v in ordner) return shell.openPath(path.join(os.homedir(), ordner[v]));
+    if (a === "ordner" && v === "netzwerk") return spawn("explorer.exe", ["shell:NetworkPlacesFolder"], { detached: true, stdio: "ignore" }).unref();
+    // empfohlene Dateien: nur Pfade aus der Windows-Liste „Zuletzt verwendet“ öffnen
+    if ((a === "datei" || a === "datei-ordner") && typeof v === "string") {
+      const bekannt = ((await h.popupData("recent", {}))?.files || []).some((f) => f.file === v);
+      if (!bekannt) return;
+      return a === "datei" ? shell.openPath(v) : shell.showItemInFolder(v);
+    }
     if (a === "explorer") return shell.openPath(path.join(process.env.SystemRoot || "C:\\Windows", "explorer.exe"));
     if (a === "einstellungen") return shell.openExternal("ms-settings:");
     if (a === "konto") return shell.openExternal("ms-settings:yourinfo");

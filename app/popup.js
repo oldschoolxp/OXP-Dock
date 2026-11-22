@@ -155,7 +155,7 @@ window.OXPMenue = {
   },
 };
 document.addEventListener("mousedown", (e) => {
-  if (!e.target.closest(".oxp-menue")) OXPMenue.zu();
+  if (!e.target.closest?.(".oxp-menue")) OXPMenue.zu();
 });
 
 document.addEventListener("keydown", (e) => {

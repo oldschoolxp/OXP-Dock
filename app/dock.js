@@ -14,7 +14,9 @@ window.OXPesc = esc;
 $("start").addEventListener("click", () => {
   hideTip();
   const r = $("start").getBoundingClientRect();
-  api.invoke("start-menu", { x: r.left, y: r.top, width: r.width, height: r.height });
+  // „mitte“: die ganze Leiste – das Startmenü öffnet sich dann mittig darüber (wie bei Windows 11)
+  const b = $("bar").getBoundingClientRect();
+  api.invoke("start-menu", { x: r.left, y: r.top, width: r.width, height: r.height, mitte: { x: b.left, y: r.top, width: b.width, height: r.height } });
 });
 $("start").addEventListener("contextmenu", (e) => { e.preventDefault(); api.invoke("start-menu-context"); });
 // Lupe, „^“ und Uhr öffnen eigene Fenster über der Leiste.
