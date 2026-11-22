@@ -406,13 +406,22 @@ function Handle($req) {
       if ($id -match '^\{[0-9A-F-]+\}\\') { ResolveKnownFolderPath $id }
     }
     'backgroundApps' {
-      # Explorer speichert auch alte Einträge. Nur Pfade mit einem laufenden Prozess verwenden.
+      # Wie der Infobereich der Windows-Taskleiste: nur Programme mit eigenem Infobereich-Symbol (NotifyIconSettings),
+      # deren Prozess gerade läuft. Früher kamen zusätzlich alle fensterlosen Prozesse dazu – darunter Dienste und
+      # Hilfsprozesse (GameInput, Office ActionsServer, NVIDIA Overlay …), die sich nicht öffnen lassen.
       $registriert = @{}
       foreach ($key in (Get-ChildItem -LiteralPath 'HKCU:\Control Panel\NotifyIconSettings' -ErrorAction SilentlyContinue)) {
         $wert = [string]$key.GetValue('ExecutablePath')
         if (-not $wert) { continue }
         $pfad = ResolveKnownFolderPath ([Environment]::ExpandEnvironmentVariables($wert))
-        if ($pfad) { $registriert[$pfad] = $true }
+        if (-not $pfad) { continue }
+        $tipp = ([string]$key.GetValue('InitialTooltip')) -replace '\s+', ' '
+        if (-not $registriert.ContainsKey($pfad) -or (-not $registriert[$pfad] -and $tipp)) { $registriert[$pfad] = $tipp.Trim() }
+      }
+      # Store-Apps (WindowsApps): Startkennung und Anzeigename aus der Startmenü-Liste – die .exe selbst lässt sich nicht starten
+      if (-not $script:trayStartApps -or ((Get-Date) - $script:trayStartAppsAt).TotalMinutes -gt 10) {
+        $script:trayStartApps = @(Get-StartApps)
+        $script:trayStartAppsAt = Get-Date
       }
       $sitzung = [Diagnostics.Process]::GetCurrentProcess().SessionId
       $windowsOrdner = "$env:SystemRoot\"
@@ -423,14 +432,23 @@ function Handle($req) {
         try {
           $pfad = [OxpDock.Procs]::ImagePath($p.Id)
           if (-not $pfad -or $pfad -eq $explorer -or $pfad -eq $a.ownPath -or $p.ProcessName -eq 'OXP-Dock') { continue }
-          $tray = $registriert.ContainsKey($pfad)
+          if (-not $registriert.ContainsKey($pfad)) { continue }
           $system = $pfad.StartsWith($windowsOrdner, [StringComparison]::OrdinalIgnoreCase)
-          if (-not $tray -and ($system -or $pfad -match $werkzeug)) { continue }
           if (-not $liste.ContainsKey($pfad)) {
-            $name = $null
-            try { $name = [Diagnostics.FileVersionInfo]::GetVersionInfo($pfad).FileDescription } catch {}
+            $appId = $null
+            $startName = $null
+            if ($pfad -match '\\WindowsApps\\([^\\_]+)_[^\\]*_([a-z0-9]{13})\\') {
+              $familie = $Matches[1] + '_' + $Matches[2] + '!'
+              $treffer = $script:trayStartApps | Where-Object { $_.AppID.StartsWith($familie, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+              if ($treffer) { $appId = $treffer.AppID; $startName = $treffer.Name }
+            }
+            $beschreibung = $null
+            try { $beschreibung = [Diagnostics.FileVersionInfo]::GetVersionInfo($pfad).FileDescription } catch {}
+            $name = $startName
+            if (-not $name) { $name = $registriert[$pfad] }
+            if (-not $name -or $name.Length -gt 40) { $name = $beschreibung }
             if (-not $name -or -not $name.Trim()) { $name = $p.ProcessName }
-            $liste[$pfad] = @{ path = $pfad; name = $name.Trim(); pids = @(); tray = $tray; canQuit = -not $system }
+            $liste[$pfad] = @{ path = $pfad; name = $name.Trim(); pids = @(); tray = $true; canQuit = -not $system; appId = $appId; tooltip = $registriert[$pfad] }
           }
           $liste[$pfad].pids += $p.Id
         } catch {}

@@ -120,18 +120,25 @@ export default function register(ctx, h) {
   });
 
   // ---------- Hintergrund-Programme ----------
-  // Hilfsprozesse nur im Ersatzverfahren filtern. Ein Windows-Infobereichseintrag hat Vorrang.
-  const LAUFZEIT = /^(?:node(?:_repl)?|pwsh|claude|codex(?:-[\w-]+)?|chrome|msedge|widgetboard)\.exe$/i;
-  const HILFSPROZESS = /(?:crashpad[_-]handler|crashreporter|helper|host|updater?|service|broker|renderer|watchdog|webview2|agent|setup|addin\)?|feedprovider|toastnotification|telemetryplugin|packagemanagerserver)\.exe$/i;
+  // Genau wie der Infobereich der Windows-Taskleiste: nur laufende Programme mit eigenem Infobereich-Symbol
+  // (siehe Systemhelfer „backgroundApps“). Dienste und Hilfsprozesse ohne Symbol erscheinen nicht mehr.
+  // Windows-eigene Symbole öffnen dasselbe wie in der Windows-Taskleiste, dazu lesbare Namen.
+  const SYSTEM_SYMBOLE = {
+    "securityhealthsystray.exe": { name: "Windows-Sicherheit", ziel: "windowsdefender:" },
+    "monotificationux.exe": { name: "Windows Update", ziel: "ms-settings:windowsupdate" },
+  };
+  const NAMEN = { "nvcontainer.exe": "NVIDIA", "razerappengine.exe": "Razer Synapse" };
+  const schoenerName = (a) => {
+    const exe = path.basename(a.path).toLowerCase();
+    const n = SYSTEM_SYMBOLE[exe]?.name || NAMEN[exe] || a.name;
+    return n.replace(/\s+v?\d+(?:\.\d+){1,}\S*$/i, "").trim(); // „MSI Afterburner v4.6.6.16757“ → „MSI Afterburner“
+  };
   async function hintergrund() {
-    const { apps } = await sh.call("backgroundApps", { ownPath: process.execPath }, 12_000);
-    const fensterPids = new Set(h.windows().map((w) => w.pid));
+    const { apps } = await sh.call("backgroundApps", { ownPath: process.execPath }, 20_000);
     return apps
-      .filter((a) => {
-        if (a.tray) return true;
-        const exe = path.basename(a.path);
-        return !a.pids.some((pid) => fensterPids.has(pid)) && !LAUFZEIT.test(exe) && !HILFSPROZESS.test(exe);
-      })
+      .filter((a) => a.tray)
+      // nvcontainer gehört zum NVIDIA-Treiber – nicht über „Beenden“ abschießen
+      .map((a) => ({ ...a, name: schoenerName(a), canQuit: a.canQuit && !/\\nvcontainer\.exe$/i.test(a.path) }))
       .sort((a, b) => a.name.localeCompare(b.name, "de", { numeric: true }) || a.path.localeCompare(b.path, "de"));
   }
 
@@ -161,16 +168,34 @@ export default function register(ctx, h) {
         return { ok: true };
       }
       if (a === "pin") {
-        h.pinFile(startZiel(app));
+        if (app.appId) await h.pinApp(app.appId, app.name);
+        else h.pinFile(startZiel(app));
         return { ok: true };
       }
       if (a === "open") {
+        // Windows-Symbole (Sicherheit, Update): dieselbe Seite wie beim Klick in der Windows-Taskleiste
+        const system = SYSTEM_SYMBOLE[path.basename(app.path).toLowerCase()];
+        if (system?.ziel) {
+          shell.openExternal(system.ziel);
+          return { ok: true };
+        }
+        // Store-Apps (WhatsApp, Smartphone-Link, Claude …) lassen sich nur über ihre App-Kennung starten –
+        // die .exe im WindowsApps-Ordner direkt aufzurufen wird von Windows verweigert
+        if (app.appId) {
+          const offen = h.windows().find((w) => app.pids.includes(w.pid));
+          if (offen) h.win.activate(offen.hwnd);
+          else spawnStart("shell:AppsFolder\\" + app.appId);
+          return { ok: true };
+        }
         const ziel = startZiel(app);
         const zielName = path.basename(ziel).toLowerCase();
         // offenes Fenster des Programms (oder des eigentlichen Hauptprogramms) nach vorn holen, sonst starten
         const fenster = h.windows().find((w) => app.pids.includes(w.pid) || path.basename(w.exe || "").toLowerCase() === zielName);
         if (fenster) h.win.activate(fenster.hwnd);
-        else if (await shell.openPath(ziel)) return { error: "Das Programm konnte nicht geöffnet werden." };
+        else if (await shell.openPath(ziel)) {
+          // Ersatz: über den Explorer starten (klappt auch bei Programmen, die openPath ablehnt)
+          spawnStart(ziel);
+        }
         return { ok: true };
       }
       if (!app.canQuit) return { error: "Dieses Programm kann hier nicht beendet werden." };

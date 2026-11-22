@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.3.2 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.3.3 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -25,7 +25,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 | CPU / RAM | Auslastung, wird orange bei ≥ 90 % |
 | Wetter | Open-Meteo (kostenlos, ohne Konto), Ort in den Einstellungen |
 | Netzwerksymbol | Zeigt LAN, WLAN oder getrennt. Beim Darüberfahren erscheinen Netzwerkname, Internetstatus und bei authentifizierten Domänennetzwerken die Domäne. Klick = Schnelleinstellungen (Win+A) |
-| Pfeil rechts | Hintergrundprogramme wie der Überlauf-Bereich der Windows-11-Taskleiste: Symbole im Raster, Name beim Drüberfahren. Klick = öffnen (Helfer wie „NVIDIA Overlay“ öffnen das eigentliche Programm), Rechtsklick = Menü (Öffnen, Dateispeicherort, Am Dock anheften, Beenden mit Bestätigung) |
+| Pfeil rechts | Hintergrundprogramme wie der Infobereich der Windows-11-Taskleiste: nur laufende Programme mit eigenem Infobereich-Symbol (keine Dienste/Hilfsprozesse), Symbole im Raster, Name beim Drüberfahren. Klick = öffnen (Store-Apps über ihre App-Kennung, Windows-Sicherheit/Windows Update öffnen ihre Einstellungsseite, Helfer wie nvcontainer öffnen das eigentliche Programm), Rechtsklick = Menü (Öffnen, Dateispeicherort, Am Dock anheften, Beenden mit Bestätigung) |
 | Uhr | Klick = Kalender über Uhrzeit und Datum · Rechtsklick = Windows-Benachrichtigungen (Win+N) |
 | ganz rechts | Desktop anzeigen (Win+D) |
 
