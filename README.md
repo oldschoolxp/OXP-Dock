@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.2.8 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.3.0 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -12,7 +12,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 
 | Teil | Bedienung |
 |---|---|
-| **OXP-Würfel** | Klick = Windows-Startmenü · Rechtsklick = Menü (Task-Manager, Explorer, Einstellungen, Website, Twitch, Dock-Einstellungen, Dock beenden) |
+| **OXP-Würfel** | Klick = **OXP-Startmenü**: Suche, Reiter „Angeheftet“ (mit „Zuletzt verwendet“) und „Alle Apps“ (A–Z, Klick auf einen Buchstaben = Buchstaben-Raster zum Springen), Rechtsklick auf eine App = Öffnen, Als Administrator, An Start/Dock anheften, Speicherort, Deinstallieren; unten Konto, Dokumente/Downloads/Bilder/Explorer/Einstellungen und Ein/Aus. In den Einstellungen abschaltbar (dann Windows-Startmenü). Rechtsklick = Menü (Windows-Startmenü, Task-Manager, Explorer, Einstellungen, Website, Twitch, Dock-Einstellungen, Dock beenden) |
 | Lupe | Windows-Suche (Win+S) |
 | **Programme** | angeheftete Programme + offene Fenster. Klick = starten / nach vorn holen / minimieren, bei mehreren Fenstern durchschalten. Mittelklick = neues Fenster. Rechtsklick = Fensterliste, anheften/lösen, schließen. Lila Strich = aktives Fenster |
 | Anheften | Windows-„An Taskleiste anheften“ / „Von Taskleiste lösen“ (Startmenü, Explorer) wirkt aufs Dock (Ordner `User PinnedTaskBar` wird beobachtet). Außerdem .exe/Verknüpfung aufs Dock ziehen oder Rechtsklick → „Am Dock anheften“. Symbole per Ziehen sortieren; offenes Programm in den angehefteten Bereich ziehen = anheften |
@@ -25,7 +25,7 @@ angehefteten Programmen, offenen Fenstern und Live-Widgets.
 | CPU / RAM | Auslastung, wird orange bei ≥ 90 % |
 | Wetter | Open-Meteo (kostenlos, ohne Konto), Ort in den Einstellungen |
 | Netzwerksymbol | Zeigt LAN, WLAN oder getrennt. Beim Darüberfahren erscheinen Netzwerkname, Internetstatus und bei authentifizierten Domänennetzwerken die Domäne. Klick = Schnelleinstellungen (Win+A) |
-| Pfeil rechts | Kompakte Liste der Hintergrundprogramme. Berücksichtigt gespeicherte Windows-Infobereichseinträge mit laufenden Prozessen und ergänzt Programme ohne sichtbares Fenster. Klick = öffnen, ✕ bzw. Rechtsklick = Beenden mit Bestätigung |
+| Pfeil rechts | Hintergrundprogramme wie der Überlauf-Bereich der Windows-11-Taskleiste: Symbole im Raster, Name beim Drüberfahren. Klick = öffnen (Helfer wie „NVIDIA Overlay“ öffnen das eigentliche Programm), Rechtsklick = Menü (Öffnen, Dateispeicherort, Am Dock anheften, Beenden mit Bestätigung) |
 | Uhr | Klick = Kalender über Uhrzeit und Datum · Rechtsklick = Windows-Benachrichtigungen (Win+N) |
 | ganz rechts | Desktop anzeigen (Win+D) |
 

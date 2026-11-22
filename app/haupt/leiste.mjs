@@ -1,6 +1,33 @@
 // Feste Teile der Leiste: Suche (Lupe) und Hintergrund-Programme („^“-Pfeil wie im Infobereich).
+import fs from "node:fs";
 import path from "node:path";
 import { execFile, spawn } from "node:child_process";
+
+/**
+ * Was beim Klick auf ein Hintergrundprogramm gestartet wird. Oft läuft im Hintergrund nur ein Helfer, der sich
+ * wie die App nennt: „NVIDIA App“ ist dort „NVIDIA App\CEF\NVIDIA Overlay.exe“ – den nochmal zu starten öffnet nichts.
+ * Deshalb zuerst „<Anzeigename>.exe“ im selben oder bis zu 3 Ordnern darüber suchen (→ „NVIDIA App\CEF\NVIDIA App.exe“,
+ * dasselbe Ziel wie die Startmenü-Verknüpfung).
+ * nvcontainer.exe (das NVIDIA-Symbol im Infobereich) öffnet ebenfalls die NVIDIA App.
+ */
+export function startZiel(app) {
+  const name = String(app.name || "").replace(/[<>:"/\\|?*]/g, "").trim();
+  if (name) {
+    let dir = path.dirname(app.path);
+    for (let i = 0; i < 4; i++) {
+      const kandidat = path.join(dir, name + ".exe");
+      if (kandidat.toLowerCase() !== app.path.toLowerCase() && fs.existsSync(kandidat)) return kandidat;
+      const hoch = path.dirname(dir);
+      if (hoch === dir) break;
+      dir = hoch;
+    }
+  }
+  if (/\\nvcontainer\.exe$/i.test(app.path)) {
+    const nvidia = path.join(process.env.ProgramFiles || "C:\\Program Files", "NVIDIA Corporation", "NVIDIA App", "CEF", "NVIDIA App.exe");
+    if (fs.existsSync(nvidia)) return nvidia;
+  }
+  return app.path;
+}
 
 const spawnStart = (ziel) => spawn("explorer.exe", [ziel], { detached: true, stdio: "ignore", windowsHide: true }).unref();
 
@@ -125,14 +152,25 @@ export default function register(ctx, h) {
   });
 
   ctx.action("tray", async (a, v) => {
-    if (a !== "open" && a !== "quit") return;
+    if (!["open", "quit", "folder", "pin"].includes(a)) return;
     try {
       const app = (await hintergrund()).find((x) => x.path === v);
       if (!app) return { error: "Das Programm läuft nicht mehr.", refresh: true };
+      if (a === "folder") {
+        shell.showItemInFolder(startZiel(app));
+        return { ok: true };
+      }
+      if (a === "pin") {
+        h.pinFile(startZiel(app));
+        return { ok: true };
+      }
       if (a === "open") {
-        const fenster = h.windows().find((w) => app.pids.includes(w.pid));
+        const ziel = startZiel(app);
+        const zielName = path.basename(ziel).toLowerCase();
+        // offenes Fenster des Programms (oder des eigentlichen Hauptprogramms) nach vorn holen, sonst starten
+        const fenster = h.windows().find((w) => app.pids.includes(w.pid) || path.basename(w.exe || "").toLowerCase() === zielName);
         if (fenster) h.win.activate(fenster.hwnd);
-        else if (await shell.openPath(app.path)) return { error: "Das Programm konnte nicht geöffnet werden." };
+        else if (await shell.openPath(ziel)) return { error: "Das Programm konnte nicht geöffnet werden." };
         return { ok: true };
       }
       if (!app.canQuit) return { error: "Dieses Programm kann hier nicht beendet werden." };

@@ -67,6 +67,7 @@ const defaults = {
   pins: null, // null = beim ersten Start aus der Windows-Taskleiste übernehmen
   hideWindowsTaskbar: true,
   allMonitors: true, // Dock auf allen Bildschirmen
+  ownStartMenu: true, // Klick auf den OXP-Würfel öffnet das OXP-Startmenü (false = Windows-Startmenü)
   autostart: false,
   channel: "oldschoolxptv",
   streamScope: "own", // "own" = nur eigener Kanal, "all" = alle Partner
@@ -1052,7 +1053,9 @@ async function loadWidgetModules() {
       saveConfig();
       pushPins();
       sendSettingsState();
-    }, iconFor: (f) => iconFor(f), popupData: (id, req) => baukasten.popupData(id, req), streamData: () => data.stream, win, shell, app, here, systemhelfer, dialog, nativeImage, Menu, dock: () => dock, saveConfig, configPath, WEBSITE, getJson: (u, h) => getJson(u, h), windows: () => windowsState, foreground: () => lastForeground, openPopup, hidePopup };
+    }, iconFor: (f) => iconFor(f), popupData: (id, req) => baukasten.popupData(id, req), streamData: () => data.stream, win, shell, app, here, systemhelfer, dialog, nativeImage, Menu, dock: () => dock, saveConfig, configPath, WEBSITE, getJson: (u, h) => getJson(u, h), windows: () => windowsState, foreground: () => lastForeground, openPopup, hidePopup,
+    // für Hintergrundprogramme und das OXP-Startmenü
+    pinFile: (f) => pin(f), config: () => config, openSettings: () => openSettings(), pins: () => config.pins };
   for (const f of files) {
     try {
       const mod = await import(new URL("./haupt/" + f, import.meta.url).href);
@@ -1064,7 +1067,8 @@ async function loadWidgetModules() {
   baukasten.sync();
 }
 
-ipcMain.handle("widget-popup", async (e, { id, rect, source }) => {
+ipcMain.handle("widget-popup", (e, args) => widgetPopup(e, args));
+async function widgetPopup(e, { id, rect, source }) {
   if (!baukasten.hasPopup(id)) return false;
   const entry = [...docks.values()].find((d) => d.win.webContents === e.sender);
   if (!entry) return false;
@@ -1077,7 +1081,7 @@ ipcMain.handle("widget-popup", async (e, { id, rect, source }) => {
   openPopup(id, payload, rect, { sticky: true, key, entry });
   pushData(); // aktuelle Widget-Daten auch ins Widget-Fenster (ohne Programmliste/Symbole)
   return true;
-});
+}
 ipcMain.handle("widget-action", async (_e, { id, action, value }) => baukasten.act(id, action, value));
 ipcMain.handle("widget-popup-refresh", async (_e, { id, req }) => {
   if (!popupState?.key.startsWith("w:") || popupState.view !== id) return;
@@ -1138,7 +1142,7 @@ function pushAll() {
 
 function publicConfig() {
   const widgets = Object.fromEntries(config.widgetOrder.map((id) => [id, true]));
-  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, autoUpdate: config.autoUpdate !== false, autostart: config.autostart, streamScope: config.streamScope };
+  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, autoUpdate: config.autoUpdate !== false, autostart: config.autostart, streamScope: config.streamScope };
 }
 
 // ---------- Claude-Nutzungslimit ----------
@@ -1326,7 +1330,11 @@ function groupWindows(match) {
 
 ipcMain.handle("hello", () => pushAll());
 // Startmenü: klappte nicht, solange ein Programm mit Administratorrechten (z. B. OBS) vorn war – siehe win32.startMenu
-ipcMain.handle("start-menu", () => win.startMenu());
+// Klick auf den OXP-Würfel: eigenes OXP-Startmenü über dem Würfel, oder (Einstellung aus) das Windows-Startmenü.
+ipcMain.handle("start-menu", (e, rect) => {
+  if (config.ownStartMenu === false || !rect) return win.startMenu();
+  return widgetPopup(e, { id: "start", rect, source: "start" });
+});
 ipcMain.handle("keys", (_e, name) => {
   const map = { search: [win.VK.WIN, win.VK.S], quick: [win.VK.WIN, win.VK.A], notifications: [win.VK.WIN, win.VK.N], desktop: [win.VK.WIN, win.VK.D] };
   if (map[name]) win.pressKeys(map[name]);
@@ -1374,6 +1382,8 @@ ipcMain.handle("group-menu", (_e, { match, pinPath, name }) => {
 
 ipcMain.handle("start-menu-context", () => {
   showMenu([
+    { label: "Windows-Startmenü", click: () => win.startMenu() },
+    { type: "separator" },
     { label: "Task-Manager", click: () => shell.openPath("C:\\Windows\\System32\\Taskmgr.exe") },
     { label: "Explorer", click: () => shell.openPath("C:\\Windows\\explorer.exe") },
     { label: "Windows-Einstellungen", click: () => shell.openExternal("ms-settings:") },
@@ -1444,10 +1454,27 @@ function pin(file, beforeMatch = null) {
   sendSettingsState();
 }
 function unpin(match) {
+  const weg = config.pins.filter((p) => p.match === match);
   config.pins = config.pins.filter((p) => p.match !== match);
   saveConfig();
   pushPins();
   sendSettingsState();
+  unpinInWindows(match, weg).catch((e) => console.error("Von Windows-Taskleiste lösen:", e.message));
+}
+
+/**
+ * „Vom Dock lösen“ löst auch in der Windows-Taskleiste – sonst käme es beim nächsten Abgleich bzw. nach dem Beenden
+ * des Docks wieder. Gesucht wird die passende Verknüpfung im Windows-Anheftordner (gleiches Programm) und die App.
+ */
+async function unpinInWindows(match, pins) {
+  const files = windowsPinLinks()
+    .map((f) => path.join(WIN_PIN_DIR, f))
+    .filter((f) => pins.some((p) => p.path?.toLowerCase() === f.toLowerCase()) || describePin(f).match === match);
+  const appId = pins.find((p) => p.appId)?.appId || null;
+  if (!files.length && !appId) return;
+  // gleich als bekannt markieren, damit der Abgleich das Lösen nicht als „in Windows gelöst“ doppelt verarbeitet
+  await systemhelfer.call("unpinFromTaskbar", { files, appId }, 20_000);
+  knownWinPins = new Set(windowsPinLinks());
 }
 
 // ---------- Einstellungsfenster ----------
@@ -1503,6 +1530,7 @@ ipcMain.handle("settings-save", (_e, patch) => {
   if (typeof patch.hideWindowsTaskbar === "boolean") config.hideWindowsTaskbar = patch.hideWindowsTaskbar;
   if (typeof patch.autostart === "boolean") config.autostart = patch.autostart;
   if (typeof patch.autoUpdate === "boolean") config.autoUpdate = patch.autoUpdate;
+  if (typeof patch.ownStartMenu === "boolean") config.ownStartMenu = patch.ownStartMenu;
   if (typeof patch.allMonitors === "boolean" && patch.allMonitors !== config.allMonitors) {
     config.allMonitors = patch.allMonitors;
     setTimeout(placeDock, 100);

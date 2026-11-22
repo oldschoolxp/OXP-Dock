@@ -336,6 +336,31 @@ function Handle($req) {
       $script:pinSig = $sig
       $script:pinErgebnis
     }
+    'unpinFromTaskbar' {
+      # Von der Windows-Taskleiste lösen – derselbe Befehl wie „Von Taskleiste lösen“ im Rechtsklick-Menü.
+      # files: angeheftete Verknüpfungen (User Pinned\TaskBar), appId: Store-App o. ä. aus shell:AppsFolder
+      $sh = New-Object -ComObject Shell.Application
+      $geloest = 0
+      $ziele = @()
+      foreach ($f in @($a.files)) {
+        if (-not $f -or -not (Test-Path -LiteralPath $f)) { continue }
+        $item = $sh.Namespace((Split-Path -LiteralPath $f)).ParseName((Split-Path -LiteralPath $f -Leaf))
+        if ($item) { $ziele += $item }
+      }
+      if ($a.appId) {
+        $item = $sh.Namespace('shell:AppsFolder').Items() | Where-Object { $_.Path -eq $a.appId } | Select-Object -First 1
+        if ($item) { $ziele += $item }
+      }
+      foreach ($item in $ziele) {
+        # ohne Umlaut im Suchmuster: Windows PowerShell liest diese Datei (ohne BOM) nicht als UTF-8
+        $verb = $item.Verbs() | Where-Object { ($_.Name -replace '&', '') -match 'Von Taskleiste l.sen|Unpin from taskbar' } | Select-Object -First 1
+        try {
+          if ($verb) { $verb.DoIt() } else { $item.InvokeVerb('taskbarunpin') }
+          $geloest++
+        } catch {}
+      }
+      $geloest
+    }
     'startApps' {
       # Alle Apps aus dem Startmenü – auch Store-Apps wie Snipping Tool, Rechner, Fotos (5 Minuten zwischengespeichert)
       if (-not $script:appsAt -or ((Get-Date) - $script:appsAt).TotalMinutes -gt 5) {

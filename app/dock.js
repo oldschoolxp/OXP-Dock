@@ -10,7 +10,12 @@ const base = (p) => String(p || "").split(/[\\/]/).pop().toLowerCase();
 window.OXPesc = esc;
 
 // ---------- feste Knöpfe ----------
-$("start").addEventListener("click", () => api.invoke("start-menu"));
+// Klick: OXP-Startmenü über dem Würfel (bzw. Windows-Startmenü, wenn in den Einstellungen so gewählt)
+$("start").addEventListener("click", () => {
+  hideTip();
+  const r = $("start").getBoundingClientRect();
+  api.invoke("start-menu", { x: r.left, y: r.top, width: r.width, height: r.height });
+});
 $("start").addEventListener("contextmenu", (e) => { e.preventDefault(); api.invoke("start-menu-context"); });
 // Lupe, „^“ und Uhr öffnen eigene Fenster über der Leiste.
 const fensterAuf = (id, el) => {
