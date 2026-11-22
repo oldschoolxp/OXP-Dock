@@ -61,9 +61,11 @@ function groesseMelden() {
 
 function farben(look) {
   if (!look) return;
+  // dasselbe Aussehen wie die Leiste (Einstellungen → Aussehen): Leistenfarbe, Akzent, Deckkraft
   const s = document.documentElement.style;
   s.setProperty("--lila", look.accent);
   s.setProperty("--bar-farbe", look.barColor);
+  if (typeof look.opacity === "number") s.setProperty("--deckkraft", Math.round(look.opacity * 100) + "%");
 }
 
 api.on("popup-view", ({ view, payload, look, limits }) => {

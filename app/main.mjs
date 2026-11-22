@@ -927,7 +927,7 @@ async function lizenzStart() {
   lizenzAnwenden(await lizenz.pruefen());
   setInterval(async () => lizenzAnwenden(await lizenz.pruefen()), 6 * 60 * 60_000);
 }
-ipcMain.handle("lizenz-status", () => (lizenzStatus ? { ...lizenzStatus, text: lizenz.beschreibung(lizenzStatus) } : null));
+ipcMain.handle("lizenz-status", () => (lizenzStatus ? { ...lizenzStatus, text: lizenz.beschreibung(lizenzStatus), look: config.look } : { look: config.look }));
 ipcMain.handle("lizenz-pruefen", async () => lizenzAnwenden(await lizenz.pruefen()));
 ipcMain.handle("lizenz-eingeben", async (_e, key) => {
   if (typeof key !== "string" || !/^DOCK-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(key.trim())) return { valid: false, text: "Ungültiges Format." };

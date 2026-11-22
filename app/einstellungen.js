@@ -55,7 +55,9 @@ api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) 
   $("previews").checked = l.previews !== false;
   $("magnifyRow").hidden = !l.magnify;
   document.querySelectorAll("#breite button").forEach((b) => b.classList.toggle("an", (b.dataset.full === "1") === !!l.fullWidth));
+  // Aussehen gilt für alle Fenster des Docks – auch für dieses Einstellungsfenster
   document.documentElement.style.setProperty("--lila", l.accent);
+  document.documentElement.style.setProperty("--bar-farbe", l.barColor);
   werteZeigen();
   startmenueZeigen(config.startMenu || {});
 });

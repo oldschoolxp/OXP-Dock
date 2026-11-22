@@ -114,10 +114,11 @@
       });
       const neu = (await w.aktion("icons", ids)) || {};
       Object.assign(symbole, neu);
-      if (!k.contains(inhalt)) return;
+      // in der Karte (nicht nur im alten Inhalt) ersetzen: wurde das Startmenü inzwischen neu aufgebaut,
+      // blieben die Symbole sonst als leere Kästchen stehen
       for (const id of ids) {
         if (!neu[id]) continue;
-        inhalt.querySelectorAll(`[data-id="${CSS.escape(id)}"] .sm-ico`).forEach((el) => (el.outerHTML = `<img class="sm-ico" src="${neu[id]}" alt="">`));
+        k.querySelectorAll(`[data-id="${CSS.escape(id)}"] .sm-ico`).forEach((el) => (el.outerHTML = `<img class="sm-ico" src="${neu[id]}" alt="">`));
       }
       if (warteschlange.size) ladeTimer = setTimeout(symboleLaden, 30);
     }

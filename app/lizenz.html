@@ -5,18 +5,19 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <title>OXP Dock – Lizenz</title>
 <style>
-  :root { --lila: #8f3cff; --text: #f1eef6; --leise: #a49db3; --kante: #2e2939; }
+  /* Leisten- und Akzentfarbe kommen aus „Aussehen“ (siehe lizenz.js) */
+  :root { --lila: #8f3cff; --bar-farbe: #18151f; --text: #f1eef6; --leise: #a49db3; --kante: color-mix(in srgb, color-mix(in srgb, var(--bar-farbe) 86%, #fff) 85%, var(--lila)); }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body { display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0%, #2a1f3d, #121016 70%); color: var(--text); font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  body { display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--bar-farbe) 75%, var(--lila)), color-mix(in srgb, var(--bar-farbe) 80%, #000) 70%); color: var(--text); font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
   .karte { width: 420px; text-align: center; padding: 28px 30px 24px; }
   img { width: 92px; height: 92px; filter: drop-shadow(0 0 18px rgba(143, 60, 255, .45)); }
   h1 { font-size: 21px; margin: 12px 0 4px; }
   p { color: var(--leise); margin: 0 0 18px; }
   #grund { color: #ff8fa3; min-height: 21px; margin-bottom: 14px; }
-  input { width: 100%; background: #15131b; color: var(--text); border: 1.5px solid var(--kante); border-radius: 10px; padding: 12px; font: 600 17px/1 "Cascadia Mono", Consolas, monospace; text-align: center; letter-spacing: .08em; outline: none; text-transform: uppercase; }
+  input { width: 100%; background: color-mix(in srgb, var(--bar-farbe) 88%, #000); color: var(--text); border: 1.5px solid var(--kante); border-radius: 10px; padding: 12px; font: 600 17px/1 "Cascadia Mono", Consolas, monospace; text-align: center; letter-spacing: .08em; outline: none; text-transform: uppercase; }
   input:focus { border-color: var(--lila); }
-  button { font: inherit; cursor: pointer; border-radius: 10px; padding: 10px 16px; border: 1px solid var(--kante); background: #2a2534; color: var(--text); }
+  button { font: inherit; cursor: pointer; border-radius: 10px; padding: 10px 16px; border: 1px solid var(--kante); background: color-mix(in srgb, var(--bar-farbe) 88%, #fff); color: var(--text); }
   .haupt { width: 100%; margin-top: 12px; background: var(--lila); border-color: var(--lila); color: #fff; font-weight: 600; }
   .haupt:disabled { opacity: .5; cursor: default; }
   .unten { display: flex; justify-content: space-between; margin-top: 18px; gap: 10px; }

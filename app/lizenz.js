@@ -3,6 +3,9 @@ const $ = (id) => document.getElementById(id);
 
 function anzeigen(s) {
   if (!s) return;
+  // gleiches Aussehen wie das Dock
+  if (s.look?.accent) document.documentElement.style.setProperty("--lila", s.look.accent);
+  if (s.look?.barColor) document.documentElement.style.setProperty("--bar-farbe", s.look.barColor);
   $("grund").textContent = s.valid ? "" : s.text || "";
   if (s.valid) {
     $("grund").innerHTML = `<span id="ok">✓ ${s.text}</span>`;
