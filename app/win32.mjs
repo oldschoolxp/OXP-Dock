@@ -188,9 +188,19 @@ export function isFramedMaximized(hwnd) {
   return IsZoomed(hwnd) && (Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & WS_CAPTION) === WS_CAPTION;
 }
 
+// Fenster von Programmen mit Administratorrechten (Task-Manager, Programme „als Administrator“) lassen sich von
+// einem normalen Programm wie dem Dock NICHT per ShowWindow wiederherstellen oder minimieren – Windows lehnt das
+// still ab (Zugriff verweigert). Der Systembefehl (WM_SYSCOMMAND, wie ein Klick auf die Titelleisten-Knöpfe)
+// kommt dagegen an. Deshalb: erst der normale Weg, und wenn er nichts bewirkt hat, der Systembefehl.
+const WM_SYSCOMMAND = 0x112;
+const SC_MINIMIZE = 0xf020, SC_RESTORE = 0xf120, SC_CLOSE = 0xf060;
+
 export function activate(hwnd) {
   if (!IsWindow(hwnd)) return;
-  if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+  if (IsIconic(hwnd)) {
+    ShowWindow(hwnd, SW_RESTORE);
+    if (IsIconic(hwnd)) PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+  }
   if (!SetForegroundWindow(hwnd)) {
     // Windows lässt sich manchmal nur „überreden“, wenn gerade eine Taste gedrückt wurde.
     keybd_event(0x12, 0, 0, 0); // Alt drücken
@@ -202,10 +212,13 @@ export function activate(hwnd) {
 
 export function minimize(hwnd) {
   ShowWindow(hwnd, SW_MINIMIZE);
+  if (!IsIconic(hwnd)) PostMessageW(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
 }
 
 export function close(hwnd) {
-  PostMessageW(hwnd, WM_CLOSE, 0, 0);
+  // Admin-Fenster nehmen WM_CLOSE von uns nicht an – dort den Systembefehl „Schließen“ schicken
+  if (isElevatedWindow(hwnd)) PostMessageW(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+  else PostMessageW(hwnd, WM_CLOSE, 0, 0);
 }
 
 /** Tastenkombination drücken, z. B. [0x5B] = Windows-Taste, [0x5B, 0x41] = Win+A. */
