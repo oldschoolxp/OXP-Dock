@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFile } from "node:child_process";
 import * as win from "./win32.mjs";
+import * as infobereich from "./infobereich.mjs";
 import { WEBSITE, SUPABASE_URL, SUPABASE_ANON_KEY } from "./oeffentlich.mjs";
 import { createBaukasten, GROUPS } from "./baukasten.mjs";
 import { createSystemhelfer } from "./systemhelfer.mjs";
@@ -1057,7 +1058,13 @@ async function loadWidgetModules() {
       sendSettingsState();
     }, iconFor: (f) => iconFor(f), popupData: (id, req) => baukasten.popupData(id, req), streamData: () => data.stream, win, shell, app, here, systemhelfer, dialog, nativeImage, Menu, dock: () => dock, saveConfig, configPath, WEBSITE, getJson: (u, h) => getJson(u, h), windows: () => windowsState, foreground: () => lastForeground, openPopup, hidePopup,
     // für Hintergrundprogramme und das OXP-Startmenü
-    pinFile: (f) => pin(f), config: () => config, openSettings: () => openSettings(), pins: () => config.pins };
+    pinFile: (f) => pin(f), config: () => config, openSettings: () => openSettings(), pins: () => config.pins,
+    // echtes Infobereich-Menü eines Programms: Dock-Fenster vorher schließen, sonst läge es über dem Menü
+    trayMenue: (pfad) => {
+      if (!infobereich.symbolFuer(pfad)) return false;
+      hidePopup();
+      return infobereich.kontextmenue(pfad);
+    } };
   for (const f of files) {
     try {
       const mod = await import(new URL("./haupt/" + f, import.meta.url).href);
@@ -1684,6 +1691,10 @@ function recoverAfterCrash() {
 let cleanedUp = false;
 function cleanup() {
   quitting = true;
+  // Infobereich-Mitlesefenster weg: Programme melden ihre Symbole danach wieder direkt bei Explorer
+  try {
+    infobereich.beenden();
+  } catch {}
   try {
     systemhelfer.stop();
   } catch {}
@@ -1719,6 +1730,10 @@ app.whenReady().then(() => {
   recoverAfterCrash();
   lizenzStart();
   createPopup();
+  // Infobereich mitlesen, damit der Rechtsklick in „Hintergrundprogramme“ die echten Programm-Menüs öffnet;
+  // regelmäßig nach vorn setzen, damit neue Anmeldungen weiter zuerst bei uns ankommen
+  infobereich.starten();
+  setInterval(() => infobereich.aktiv() && infobereich.nachVorn(), 3000);
   loadWidgetModules();
   initUpdater({
     fenster: () => (settingsWin && !settingsWin.isDestroyed() ? settingsWin : null),

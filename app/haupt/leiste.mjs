@@ -159,6 +159,8 @@ export default function register(ctx, h) {
   });
 
   ctx.action("tray", async (a, v) => {
+    // Rechtsklick: echtes Menü des Programms (wie in der Windows-Taskleiste); false = nicht verfügbar → OXP-Menü
+    if (a === "kontext" && typeof v === "string") return !!h.trayMenue?.(v);
     if (!["open", "quit", "folder", "pin"].includes(a)) return;
     try {
       const app = (await hintergrund()).find((x) => x.path === v);

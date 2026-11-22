@@ -41,7 +41,20 @@ const PostMessageW = user32.func("bool __stdcall PostMessageW(intptr_t hWnd, uin
 const GetWindowRect = user32.func("bool __stdcall GetWindowRect(intptr_t hWnd, _Out_ RECT *rect)");
 const FindWindowW = user32.func("intptr_t __stdcall FindWindowW(str16 cls, str16 title)");
 const keybd_event = user32.func("void __stdcall keybd_event(uint8 vk, uint8 scan, uint32 flags, uintptr_t extra)");
-const SHAppBarMessage = shell32.func("uintptr_t __stdcall SHAppBarMessage(uint32 msg, _Inout_ APPBARDATA *data)");
+const SHAppBarMessageRoh = shell32.func("uintptr_t __stdcall SHAppBarMessage(uint32 msg, _Inout_ APPBARDATA *data)");
+// Eigene AppBar-Aufrufe müssen DIREKT bei Explorer landen: Liegt das Infobereich-Mitlesefenster des Docks
+// (gleicher Prozess) vorn, gibt Windows die Ergebnisse (z. B. den freien Platz bei ABM_QUERYPOS) nicht zurück.
+// infobereich.mjs setzt dafür eine Hülle, die das Fenster während des Aufrufs kurz nach hinten schiebt.
+let appbarHuelle = null;
+export function setAppbarHuelle(fn) {
+  appbarHuelle = fn;
+}
+function SHAppBarMessage(msg, data) {
+  return appbarHuelle ? appbarHuelle(() => SHAppBarMessageRoh(msg, data)) : SHAppBarMessageRoh(msg, data);
+}
+/** AppBar-Nachricht über denselben Weg wie das Dock (zum Prüfen). */
+export const appbarNachricht = (msg, data) => SHAppBarMessage(msg, data);
+export const APPBARDATA_GROESSE = () => koffi.sizeof(APPBARDATA);
 const OpenProcess = kernel32.func("intptr_t __stdcall OpenProcess(uint32 access, bool inherit, uint32 pid)");
 const CloseHandle = kernel32.func("bool __stdcall CloseHandle(intptr_t h)");
 const QueryFullProcessImageNameW = kernel32.func(
@@ -75,6 +88,8 @@ function readText(fn, hwnd) {
 
 const pathBuf = Buffer.alloc(2048);
 const exeCache = new Map(); // pid -> exe path
+/** Programmdatei eines Prozesses (für infobereich.mjs). */
+export const exeOfPid = (pid) => exeForPid(pid);
 function exeForPid(pid) {
   if (exeCache.has(pid)) return exeCache.get(pid);
   let exe = "";
@@ -236,7 +251,7 @@ export function isElevatedWindow(hwnd) {
 
 /** Startmenü öffnen, ohne Tastendruck: Nachricht an die Windows-Taskleiste (WM_SYSCOMMAND / SC_TASKLIST). */
 export function openStartMenu() {
-  const tray = Number(FindWindowW("Shell_TrayWnd", null));
+  const tray = explorerTray();
   return tray ? PostMessageW(tray, 0x0112, 0xf130, 0) : false;
 }
 
@@ -265,10 +280,27 @@ export const VK = {
 
 const FindWindowExW = user32.func("intptr_t __stdcall FindWindowExW(intptr_t parent, intptr_t after, str16 cls, str16 title)");
 
+// Das Dock legt für die Infobereich-Menüs ein eigenes, unsichtbares Fenster der Klasse „Shell_TrayWnd“ an
+// (siehe infobereich.mjs). Alles, was die echte Windows-Taskleiste meint, muss an diesem Fenster vorbei.
+let eigenesTray = 0;
+export function setEigenesTrayFenster(hwnd) {
+  eigenesTray = Number(hwnd) || 0;
+}
+/** Die echte Taskleiste von Explorer (nicht das Mitlese-Fenster des Docks). */
+export function explorerTray() {
+  let h = 0;
+  for (let i = 0; i < 8; i++) {
+    h = Number(FindWindowExW(0, h, "Shell_TrayWnd", null));
+    if (!h) return 0;
+    if (h !== eigenesTray) return h;
+  }
+  return 0;
+}
+
 /** Haupt-Taskleiste zuerst, dann die Taskleisten der weiteren Bildschirme. */
 function trayWindows() {
   const list = [];
-  const main = Number(FindWindowW("Shell_TrayWnd", null));
+  const main = explorerTray();
   if (main) list.push(main);
   let h = 0;
   for (let i = 0; i < 16; i++) {

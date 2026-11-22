@@ -127,9 +127,13 @@ OXPAnsichten.add("tray", (karte, d, w) => {
     nameZeile.textContent = t ? t.app.name : " ";
   };
   gitter.onmouseleave = () => (nameZeile.textContent = " ");
-  gitter.oncontextmenu = (e) => {
+  gitter.oncontextmenu = async (e) => {
     const t = appVon(e);
     if (!t) return;
+    e.preventDefault();
+    // Rechtsklick öffnet das echte Menü des Programms (z. B. Razer Synapse: „Synapse starten“, „Chroma …“),
+    // genau wie in der Windows-Taskleiste. Umschalt+Rechtsklick oder kein eigenes Menü → OXP-Menü.
+    if (!e.shiftKey && (await w.aktion("kontext", t.app.path))) return;
     gitter.querySelectorAll(".offen").forEach((x) => x.classList.remove("offen"));
     t.b.classList.add("offen");
     OXPMenue.zeigen(e, [
