@@ -62,11 +62,14 @@
     },
   });
   W.add("whatsapp", {
-    keys: ["windows"],
+    keys: ["windows", "whatsappNeu"],
     render(el, c) {
       const offen = (c.fenster || []).some((x) => /whatsapp/i.test(x.exe || ""));
-      el.innerHTML = `${L.whatsapp}<span class="klein">${offen ? "offen" : "WhatsApp"}</span>`;
-      el.dataset.tip = offen ? "WhatsApp nach vorne holen" : "WhatsApp öffnen";
+      // roter Punkt bei neuen Nachrichten (mit Zahl, wenn WhatsApp eine Anzahl meldet)
+      const neu = Number(c.daten("whatsappNeu")?.neu) || 0;
+      const punkt = neu ? `<i class="neu-punkt">${neu > 1 ? (neu > 99 ? "99+" : neu) : ""}</i>` : "";
+      el.innerHTML = `<span class="neu-huelle">${L.whatsapp}${punkt}</span><span class="klein">${offen ? "offen" : "WhatsApp"}</span>`;
+      el.dataset.tip = (neu ? (neu > 1 ? `${neu} neue Nachrichten · ` : "Neue Nachricht · ") : "") + (offen ? "WhatsApp nach vorne holen" : "WhatsApp öffnen");
     },
     click: (el, c) => c.aktion("open"),
   });

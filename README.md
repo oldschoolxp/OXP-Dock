@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.3.4 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.3.5 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
@@ -69,7 +69,7 @@ Klick auf ein Widget öffnet meist ein Fenster über der Leiste (Popup), Rechtsk
 - **System & Windows:** Lautstärke (+Ausgabegeräte), Mikrofon, Akku ×4, Helligkeit (Laptop/DDC-Monitor), Schnellschalter (WLAN/BT/…), Nicht stören, Top-CPU, Top-RAM, Temperatur, Tastatursprache, Benachrichtigungen, Papierkorb, Speicher, Netz-Tempo, Screenshots, Hintergrundbilder, Zuletzt geöffnet, Alle Programme, Fenster-Übersicht, Sperren, CPU/RAM
 - **Zeit & Produktivität:** Klappuhr, Analoguhr, Weltuhren, 7 Tage, Tagesleiste, Kalender (Outlook wenn offen + iCal-Links + Streamplan), Aufgaben, Notizen, Pomodoro, Timer, Stoppuhr, Rechner, Bildschirmzeit, Sprachnotiz, Ablage
 - **Wetter, Musik & Kurse:** Wetter, stündlich, heute, Regen-Hinweis, Sonne, Läuft gerade (Windows-Mediensteuerung), Audio-Ausgabe, Krypto (CoinGecko), Aktien (Yahoo), Währungen (EZB)
-- **Konten & KI:** Follower & Abos (Website `/api/social-stats`), Outlook-Mails, Gmail (IMAP + App-Passwort, verschlüsselt), GitHub (über `gh`), WhatsApp, Claude-Limit, KI-Limits (Claude/Codex/Gemini-CLI/DeepSeek)
+- **Konten & KI:** Follower & Abos (Website `/api/social-stats`), Outlook-Mails, Gmail (IMAP + App-Passwort, verschlüsselt), GitHub (über `gh`), WhatsApp (roter Punkt bei neuen Nachrichten – zählt WhatsApp-Plaketten/-Benachrichtigungen in einer Kopie der Windows-Benachrichtigungsdatenbank `wpndatabase.db`, ohne Inhalte), Claude-Limit, KI-Limits (Claude/Codex/Gemini-CLI/DeepSeek)
 - Weitere Integrationen: X und Shop-Widgets sind derzeit nicht enthalten.
 
 Fenster-Vorschau: beim Verweilen über einem Programm mit offenen Fenstern (Live-Bilder, Klick = nach vorn, ✕ = schließen).

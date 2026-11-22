@@ -179,6 +179,16 @@ button.widget:hover > svg { color: var(--text); }
 .ring .ring-bg { stroke: #2c2836; }
 .ring .ring-fg { stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dasharray .6s; }
 .ring text { fill: var(--text); font-size: 10px; font-weight: 700; stroke: none; }
+/* Roter Punkt für Neues (z. B. WhatsApp-Nachrichten) oben rechts am Symbol */
+.neu-huelle { position: relative; display: inline-flex; }
+.neu-punkt {
+  position: absolute; top: -4px; right: -6px; min-width: 10px; height: 10px; padding: 0 3px; border-radius: 6px;
+  background: #ff3b5c; box-shadow: 0 0 0 2px var(--bar-farbe), 0 0 8px #ff3b5c;
+  font: 700 8.5px/10px "Segoe UI", sans-serif; font-style: normal; color: #fff; text-align: center;
+  animation: neu-puls 2s ease-in-out infinite;
+}
+.neu-punkt:not(:empty) { height: 13px; min-width: 13px; line-height: 13px; top: -6px; right: -8px; border-radius: 7px; }
+@keyframes neu-puls { 50% { box-shadow: 0 0 0 2px var(--bar-farbe), 0 0 14px #ff3b5c; } }
 .punkte { display: flex; gap: 3px; }
 .punkte i { width: 7px; height: 14px; border-radius: 2px; background: #2c2836; }
 .meter.breit { width: 140px; }

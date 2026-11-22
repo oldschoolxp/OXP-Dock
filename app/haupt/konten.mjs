@@ -19,7 +19,7 @@ export default function register(ctx, h) {
   w("outlookMail", "Outlook-Mails", "Ungelesene Mails aus Outlook (wenn Outlook geöffnet ist)", ["outlookMail"]);
   w("gmail", "Gmail", "Ungelesene Gmail-Mails (App-Passwort im Fenster eintragen)", ["gmail"]);
   w("github", "GitHub", "Beiträge und Benachrichtigungen (nutzt die GitHub-CLI-Anmeldung)", ["github"]);
-  w("whatsapp", "WhatsApp", "WhatsApp öffnen oder nach vorne holen", ["windows"]);
+  w("whatsapp", "WhatsApp", "WhatsApp öffnen oder nach vorne holen – roter Punkt bei neuen Nachrichten", ["windows", "whatsappNeu"]);
   w("aiLimits", "KI-Limits", "Claude, ChatGPT (Codex), Gemini (Gemini CLI), DeepSeek – liest die Anmeldungen dieser Programme auf diesem PC", ["ai"]);
 
   const einst = (id, def) => ({ ...def, ...(ctx.config().widgetSettings?.[id] || {}) });
@@ -120,6 +120,54 @@ export default function register(ctx, h) {
   ctx.popup("github", async () => ({}));
 
   // ---------- WhatsApp ----------
+  // Neue Nachrichten: WhatsApp hat keine Schnittstelle dafür. Windows legt aber für jede App, die Benachrichtigungen
+  // zeigt, Einträge in der Benachrichtigungs-Datenbank an (wpndatabase.db): Zähler-Plaketten („badge“, die Zahl am
+  // Taskleisten-Symbol) und Benachrichtigungen („toast“), bis man sie gelesen hat. Die Datei ist gesperrt, deshalb
+  // wird eine Kopie gelesen – nur wenn sie sich geändert hat. Es werden NUR die Einträge GEZÄHLT, keine Inhalte gelesen.
+  const wpnOrdner = path.join(process.env.LOCALAPPDATA || "", "Microsoft", "Windows", "Notifications");
+  const wpnKopie = path.join(os.tmpdir(), "oxp-dock-wpn");
+  let wpnStand = "";
+  let wpnErgebnis = { neu: 0 };
+  ctx.provide("whatsappNeu", 6000, async () => {
+    const dateien = ["wpndatabase.db", "wpndatabase.db-wal", "wpndatabase.db-shm"];
+    let stand = "";
+    for (const f of dateien) {
+      try {
+        const s = fs.statSync(path.join(wpnOrdner, f));
+        stand += s.mtimeMs + ":" + s.size + ";";
+      } catch {}
+    }
+    if (stand === wpnStand) return wpnErgebnis;
+    fs.mkdirSync(wpnKopie, { recursive: true });
+    for (const f of dateien) {
+      try {
+        fs.copyFileSync(path.join(wpnOrdner, f), path.join(wpnKopie, f));
+      } catch {}
+    }
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(path.join(wpnKopie, "wpndatabase.db"), { readOnly: true });
+    try {
+      const zeilen = db
+        .prepare("select n.Type as art, n.Payload as inhalt from Notification n join NotificationHandler h on h.RecordId = n.HandlerId where lower(h.PrimaryId) like '%whatsapp%'")
+        .all();
+      let plakette = 0;
+      let meldungen = 0;
+      for (const z of zeilen) {
+        if (z.art === "badge") {
+          // nur der Zahlenwert der Plakette, z. B. <badge value="3"/>
+          const wert = /value="([^"]+)"/i.exec(Buffer.from(z.inhalt || "").toString("utf8"))?.[1];
+          const n = Number(wert);
+          if (n > 0) plakette = Math.max(plakette, n);
+          else if (wert && !/^(none|0)$/i.test(wert)) plakette = Math.max(plakette, 1); // z. B. „newMessage“
+        } else if (z.art === "toast") meldungen++;
+      }
+      wpnErgebnis = { neu: plakette || meldungen, plakette, meldungen };
+    } finally {
+      db.close();
+    }
+    wpnStand = stand;
+    return wpnErgebnis;
+  });
   ctx.action("whatsapp", async () => {
     const wa = h.windows().find((x) => /whatsapp/i.test(x.exe) || /^WhatsApp/.test(x.title));
     if (wa) h.win.activate(wa.hwnd);
