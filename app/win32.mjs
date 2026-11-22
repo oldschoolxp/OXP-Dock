@@ -184,8 +184,18 @@ export function isMaximized(hwnd) {
   return !!IsZoomed(hwnd);
 }
 
+/**
+ * Ein ganz normal maximiertes Programmfenster (kein Vollbild): maximiert UND mit Windows-Titelleiste ODER mit
+ * veränderbarem Rahmen. Letzteres gilt für Programme mit selbst gezeichneter Titelleiste (z. B. ElegooSlicer,
+ * Bambu Studio, viele Electron-/Qt-/wx-Programme) – die galten vorher als Vollbild: Das Dock gab seinen Platz frei,
+ * das Fenster wuchs darauf auf volle Höhe, und Dock und Fenster schoben sich gegenseitig hin und her.
+ * Echte Vollbild-Spiele/-Videos haben weder Titelleiste noch veränderbaren Rahmen.
+ */
+const WS_THICKFRAME = 0x00040000;
 export function isFramedMaximized(hwnd) {
-  return IsZoomed(hwnd) && (Number(GetWindowLongPtrW(hwnd, GWL_STYLE)) & WS_CAPTION) === WS_CAPTION;
+  if (!IsZoomed(hwnd)) return false;
+  const stil = Number(GetWindowLongPtrW(hwnd, GWL_STYLE));
+  return (stil & WS_CAPTION) === WS_CAPTION || (stil & WS_THICKFRAME) !== 0;
 }
 
 // Fenster von Programmen mit Administratorrechten (Task-Manager, Programme „als Administrator“) lassen sich von
