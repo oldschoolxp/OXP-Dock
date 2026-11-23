@@ -19,7 +19,7 @@ export default function register(ctx, h) {
   w("outlookMail", "Outlook-Mails", "Ungelesene Mails aus Outlook (wenn Outlook geöffnet ist)", ["outlookMail"]);
   w("gmail", "Gmail", "Ungelesene Gmail-Mails (App-Passwort im Fenster eintragen)", ["gmail"]);
   w("github", "GitHub", "Beiträge und Benachrichtigungen (nutzt die GitHub-CLI-Anmeldung)", ["github"]);
-  w("whatsapp", "WhatsApp", "WhatsApp öffnen oder nach vorne holen – roter Punkt bei neuen Nachrichten", ["windows", "whatsappNeu"]);
+  w("whatsapp", "WhatsApp", "WhatsApp öffnen oder nach vorne holen – roter Punkt bei ungelesenen Nachrichten", ["windows", "whatsappNeu"]);
   w("aiLimits", "KI-Limits", "Claude, ChatGPT (Codex), Gemini (Gemini CLI), DeepSeek – liest die Anmeldungen dieser Programme auf diesem PC", ["ai"]);
 
   const einst = (id, def) => ({ ...def, ...(ctx.config().widgetSettings?.[id] || {}) });
@@ -161,7 +161,10 @@ export default function register(ctx, h) {
           else if (wert && !/^(none|0)$/i.test(wert)) plakette = Math.max(plakette, 1); // z. B. „newMessage“
         } else if (z.art === "toast") meldungen++;
       }
-      wpnErgebnis = { neu: plakette || meldungen, plakette, meldungen };
+      // Nur die Plakette zählt: WhatsApp nimmt sie weg, sobald die Nachricht gelesen ist (auch am Handy).
+      // Benachrichtigungen („toast“) bleiben dagegen in der Windows-Liste liegen, bis man sie dort wegklickt –
+      // sie würden einen roten Punkt zeigen, obwohl längst alles gelesen ist.
+      wpnErgebnis = { neu: plakette, plakette, meldungen };
     } finally {
       db.close();
     }
