@@ -370,8 +370,11 @@ export function hideWindowsTaskbar() {
 }
 
 /** Wird regelmäßig aufgerufen: Windows blendet die Taskleiste z. B. beim Startmenü gern wieder ein. */
+// die Taskleisten-Fenster nur alle 2 s neu suchen (wird sehr oft aufgerufen)
+let trayCache = { zeit: 0, liste: [] };
 export function keepWindowsTaskbarHidden() {
-  for (const t of trayWindows()) {
+  if (Date.now() - trayCache.zeit > 2000 || trayCache.liste.some((t) => !IsWindow(t))) trayCache = { zeit: Date.now(), liste: trayWindows() };
+  for (const t of trayCache.liste) {
     if (IsWindowVisible(t)) ShowWindow(t, SW_HIDE);
     taskleisteUnsichtbar(t); // z. B. nach einem Neustart von Explorer wieder setzen
   }

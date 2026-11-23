@@ -555,15 +555,30 @@ function einfahren(d, ein) {
   if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs) {
     clearTimeout(d.platzTimer);
     try {
-      if (!ein) win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
+      if (!ein) {
+        win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
+        taskleisteNachziehen();
+      }
       else
         d.platzTimer = setTimeout(() => {
-          if (d.eingefahren && !d.win.isDestroyed()) win.releaseBottom(d.hwnd);
+          if (d.eingefahren && !d.win.isDestroyed()) {
+            win.releaseBottom(d.hwnd);
+            taskleisteNachziehen();
+          }
         }, 300);
     } catch (e) {
       console.error("Platz beim Aus-/Einklappen:", e);
     }
   }
+}
+// nach einer Platz-Änderung reagiert Explorer etwas verzögert – mehrmals kurz hintereinander nachsehen
+function taskleisteNachziehen() {
+  if (!taskbarHidden) return;
+  for (const ms of [0, 20, 50, 100, 200, 400]) setTimeout(() => {
+    try {
+      win.keepWindowsTaskbarHidden();
+    } catch {}
+  }, ms);
 }
 function autoHideRunde(d, p, over) {
   if (!config.autoHide) {
@@ -1861,6 +1876,13 @@ app.whenReady().then(() => {
   setInterval(() => {
     updateMousePassThrough();
     checkPopupHover();
+    // Windows-Taskleiste in kurzen Abständen unsichtbar halten: Explorer stellt sie bei jeder Änderung der
+    // Arbeitsfläche (z. B. beim Aus-/Einklappen des Docks) neu auf und kann ihr dabei die unsichtbare Form nehmen
+    if (taskbarHidden) {
+      try {
+        win.keepWindowsTaskbarHidden();
+      } catch {}
+    }
   }, 60);
   setInterval(pollWindows, 700);
   setInterval(refreshClaude, 5 * 60_000);
