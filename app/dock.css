@@ -146,6 +146,11 @@ button.widget:hover { background: var(--hover); border-color: var(--kante); }
 .claude .meter { width: 128px; }
 .claude .meter .track i { background: linear-gradient(90deg, #c4623f, var(--claude)); }
 .claude .meter.warn .track i { background: linear-gradient(90deg, #ff8a3d, var(--live)); }
+/* zwei Zeilen (Sitzung + Woche) müssen in die 38 px hohe Kachel passen */
+.claude .stack { gap: 3px; }
+.claude .meter { gap: 2px; }
+.claude .meter .row { font-size: 9.5px; line-height: 10px; }
+.claude .meter .track { height: 3px; }
 
 .wetter-icon { font-size: 18px; }
 
