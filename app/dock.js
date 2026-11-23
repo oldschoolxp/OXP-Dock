@@ -432,7 +432,6 @@ function applyLook() {
   document.body.classList.toggle("magnify", !!l.magnify);
   document.body.classList.toggle("vollbreit", !!l.fullWidth);
   document.body.classList.toggle("autohide", !!state.config.autoHide);
-  wuerfelBreite();
   letzteBreite = "";
   requestAnimationFrame(barMelden);
 }
@@ -616,19 +615,93 @@ api.on("widget", ({ key, value }) => {
 });
 setInterval(() => renderClaude(), 60_000); // Restzeit aktuell halten
 
-// ---------- Automatisch ausblenden: Würfel kommt hoch, dann klappt die Leiste vom Würfel aus auf ----------
-// Wie breit der sichtbare Teil am Anfang ist (Rand der Leiste bis rechts neben den Würfel)
-function wuerfelBreite() {
-  const bar = $("bar").getBoundingClientRect();
-  const s = $("start").getBoundingClientRect();
-  if (bar.width) document.documentElement.style.setProperty("--wuerfel-rest", Math.max(0, Math.round(bar.right - s.right - 4)) + "px");
+// ---------- Automatisch ausblenden ----------
+// Mittig: der OXP-Würfel kommt in der Bildschirmmitte hoch und gleitet an seinen Platz, dann erscheinen die übrigen
+// Teile von der Mitte nach außen, zuletzt der Rahmen um alles (~2,3 s).
+// Ganze Breite: die Leiste gleitet wie bei Windows von unten herein.
+// Nur transform und opacity werden animiert (Web Animations) – kein Neuzeichnen pro Bild, daher flüssig.
+let laufend = [];
+function animationenStoppen() {
+  for (const a of laufend) a.cancel();
+  laufend = [];
 }
-new ResizeObserver(wuerfelBreite).observe($("bar"));
-api.on("einfahren", (ein) => {
-  wuerfelBreite();
-  if (ein) {
-    hideTip();
-    resetMagnify();
+function teile() {
+  const bar = $("bar");
+  const liste = [];
+  for (const k of bar.children) {
+    if (k.id === "apps") liste.push(...$("appsTrack").children);
+    else if (k.id === "widgets") liste.push(...k.children);
+    else if (!k.classList.contains("spacer")) liste.push(k);
   }
-  document.body.classList.toggle("eingefahren", !!ein);
+  return liste.filter((el) => el.offsetParent !== null && !el.hidden);
+}
+function ausfahren() {
+  animationenStoppen();
+  document.body.classList.remove("eingefahren");
+  const bar = $("bar");
+  if (document.body.classList.contains("vollbreit")) {
+    laufend.push(bar.animate([{ transform: "translateY(110%)" }, { transform: "none" }], { duration: 260, easing: "cubic-bezier(.15,.85,.25,1)" }));
+    return;
+  }
+  const mitte = innerWidth / 2;
+  const wuerfel = $("start");
+  const wr = wuerfel.getBoundingClientRect();
+  const dx = mitte - (wr.left + wr.width / 2);
+  // 1. Würfel: in der Mitte hochkommen (0–0,55 s), kurz halten, an seinen Platz gleiten (bis 1,1 s)
+  laufend.push(
+    wuerfel.animate(
+      [
+        // Tempo je Abschnitt (die Kurve gilt bis zum nächsten Schlüsselbild): hochfedern, halten, an den Platz gleiten
+        { transform: `translate(${dx}px, 70px) rotate(-120deg) scale(.6)`, opacity: 0, offset: 0, easing: "cubic-bezier(.2,.9,.35,1.25)" },
+        { transform: `translate(${dx}px, 0) rotate(0) scale(1)`, opacity: 1, offset: 0.45, easing: "linear" },
+        { transform: `translate(${dx}px, 0) rotate(0) scale(1)`, opacity: 1, offset: 0.55, easing: "cubic-bezier(.45,0,.2,1)" },
+        { transform: "none", opacity: 1, offset: 1 },
+      ],
+      { duration: 1200, easing: "linear", fill: "backwards" },
+    ),
+  );
+  // 2. übrige Teile: von der Mitte nach außen nacheinander (1,0–1,8 s)
+  const andere = teile().filter((el) => el !== wuerfel);
+  const abstand = (el) => {
+    const r = el.getBoundingClientRect();
+    return Math.abs(r.left + r.width / 2 - mitte);
+  };
+  const weitester = Math.max(1, ...andere.map(abstand));
+  for (const el of andere) {
+    laufend.push(
+      el.animate([{ opacity: 0, transform: "translateY(16px) scale(.55)" }, { opacity: 1, transform: "none" }], {
+        duration: 380,
+        delay: 1150 + (abstand(el) / weitester) * 450,
+        easing: "cubic-bezier(.2,1.3,.4,1)",
+        fill: "backwards",
+      }),
+    );
+  }
+  // 3. zuletzt der Rahmen um alles (1,85–2,35 s)
+  laufend.push(
+    bar.animate([{ opacity: 0, transform: "scale(.985, .8)" }, { opacity: 1, transform: "none" }], {
+      pseudoElement: "::before",
+      duration: 500,
+      delay: 1950,
+      easing: "cubic-bezier(.2,.8,.2,1)",
+      fill: "backwards",
+    }),
+  );
+}
+function einfahren() {
+  animationenStoppen();
+  hideTip();
+  resetMagnify();
+  const a = $("bar").animate([{ transform: "none", opacity: 1 }, { transform: "translateY(110%)", opacity: 0 }], { duration: 240, easing: "cubic-bezier(.5,0,.75,0)" });
+  laufend.push(a);
+  a.onfinish = () => document.body.classList.add("eingefahren");
+}
+let eingefahrenJetzt = null;
+api.on("einfahren", (ein) => {
+  if (ein === eingefahrenJetzt) return;
+  const vorher = eingefahrenJetzt;
+  eingefahrenJetzt = !!ein;
+  // beim ersten Mal (Start) ohne Animation
+  if (vorher === null) return void document.body.classList.toggle("eingefahren", !!ein);
+  ein ? einfahren() : ausfahren();
 });

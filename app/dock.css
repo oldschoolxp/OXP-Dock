@@ -271,17 +271,15 @@ button.widget:hover > svg { color: var(--text); }
 .jetzt.mit-hintergrund .titel .klein { color: rgba(255,255,255,.75); }
 
 /* ---------- Automatisch ausblenden ---------- */
-/* Ausfahren (~2,2 s): erst kommt nur der Würfel-Teil der Leiste von unten hoch, dann klappt sie nach rechts auf */
-body.autohide #bar {
-  clip-path: inset(-200px -20px -20px -20px);
-  transition: transform .75s cubic-bezier(.2, 1.35, .45, 1), clip-path 1.45s cubic-bezier(.25, .8, .25, 1) .75s, width .25s ease-out;
+/* Der Rahmen (Hintergrund, Kante, Schatten) liegt als eigene Ebene hinter dem Inhalt, damit er sich getrennt
+   einblenden lässt. Animiert wird nur transform/opacity – das schafft auch das Zeichnen ohne Grafikkarte flüssig. */
+body.autohide #bar { background: none; border-color: transparent; box-shadow: none; isolation: isolate; }
+body.autohide #bar::before {
+  content: ""; position: absolute; inset: -1px; z-index: -1; pointer-events: none; border-radius: 14px;
+  background: linear-gradient(180deg, var(--bar-oben), var(--bar));
+  border: 1px solid var(--kante);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.30), 0 -2px 18px color-mix(in srgb, var(--lila) 10%, transparent) inset;
 }
-body.autohide #start img { transition: transform .75s cubic-bezier(.2, 1.35, .45, 1), filter .75s; }
-/* Einfahren (schneller): erst zuklappen, dann nach unten weg */
-body.autohide.eingefahren #bar {
-  transform: translateY(calc(100% + 14px));
-  clip-path: inset(-200px var(--wuerfel-rest, calc(100% - 56px)) -20px -20px);
-  transition: clip-path .5s cubic-bezier(.5, 0, .75, 0), transform .4s cubic-bezier(.5, 0, .75, 0) .45s, width .25s ease-out;
-}
-body.autohide.eingefahren #start img { transform: rotate(-90deg) scale(.7); filter: drop-shadow(0 0 0 transparent); }
+body.autohide.drop #bar::before { border-color: var(--lila); box-shadow: 0 0 16px color-mix(in srgb, var(--lila) 50%, transparent); }
+body.autohide.eingefahren #bar { visibility: hidden; }
 body.autohide.eingefahren #tip { opacity: 0 !important; }

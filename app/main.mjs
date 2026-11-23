@@ -540,7 +540,7 @@ function placeEntry(d, fg = win.foregroundWindow()) {
 // ---------- Automatisch ausblenden ----------
 // Eingefahren: Maus an die untere Bildschirmkante → Leiste fährt aus (Würfel kommt hoch, Leiste klappt auf).
 // Ausgefahren: Maus weg von der Leiste (und kein Widget-Fenster/Menü offen) → nach kurzer Zeit wieder einfahren.
-const AUSFAHREN_MS = 2300; // so lange dauert die Animation in der Leiste
+const AUSFAHREN_MS = 2500; // so lange dauert die Animation in der Leiste
 const EINFAHREN_NACH_MS = 1200;
 function einfahren(d, ein) {
   if (d.win.isDestroyed()) return;
