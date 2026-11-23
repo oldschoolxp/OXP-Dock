@@ -543,14 +543,32 @@ function placeEntry(d, fg = win.foregroundWindow()) {
 // ---------- Automatisch ausblenden ----------
 // Eingefahren: Maus an die untere Bildschirmkante → Leiste fährt aus (Würfel kommt hoch, Leiste klappt auf).
 // Ausgefahren: Maus weg von der Leiste (und kein Widget-Fenster/Menü offen) → nach kurzer Zeit wieder einfahren.
-const AUSFAHREN_MS = 1300; // so lange dauert die Animation in der Leiste (~1,2 s)
+const AUSFAHREN_MS = 1700; // so lange dauert die Animation in der Leiste (~1,2 s, bei „Platz machen“ bis 0,4 s später)
 const EINFAHREN_NACH_MS = 1200;
 function einfahren(d, ein) {
   if (d.win.isDestroyed()) return;
   d.eingefahren = ein;
   d.ausfahrenSeit = ein ? 0 : Date.now();
   d.wegSeit = 0;
-  d.win.webContents.send("einfahren", ein);
+  clearTimeout(d.sendeTimer);
+  const senden = () => !d.win.isDestroyed() && d.win.webContents.send("einfahren", d.eingefahren);
+  // Bei „Fenster machen Platz“ erst den Platz reservieren und die Animation einen Moment später starten:
+  // Windows schiebt das Dock nach der Reservierung kurz nach oben – das soll passieren, solange es noch unsichtbar ist
+  const erstPlatz = !ein && config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs;
+  if (erstPlatz) {
+    // warten, bis Windows das Fenster verschoben und das Dock es zurückgesetzt hat (ruhig an der Kante), höchstens 0,4 s
+    const start = Date.now();
+    let ruhig = 0;
+    const pruefen = () => {
+      if (d.eingefahren || d.win.isDestroyed()) return;
+      dockAnDieKante(d);
+      const r = win.windowRect(d.hwnd);
+      ruhig = r && d.nativeEdge && r.bottom === d.nativeEdge.bottom ? ruhig + 1 : 0;
+      if ((Date.now() - start >= 140 && ruhig >= 3) || Date.now() - start > 400) senden();
+      else d.sendeTimer = setTimeout(pruefen, 15);
+    };
+    d.sendeTimer = setTimeout(pruefen, 15);
+  } else senden();
   // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
   if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs) {
     clearTimeout(d.platzTimer);
@@ -558,6 +576,8 @@ function einfahren(d, ein) {
       if (!ein) {
         win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
         taskleisteNachziehen();
+        // Windows verschiebt das Fenster kurz danach – gleich mehrmals zurücksetzen, damit nichts zu sehen ist
+        for (const ms of [0, 10, 25, 40, 60, 90, 130, 200, 300]) setTimeout(() => dockAnDieKante(d), ms);
       }
       else
         d.platzTimer = setTimeout(() => {
@@ -579,6 +599,11 @@ function taskleisteNachziehen() {
       win.keepWindowsTaskbarHidden();
     } catch {}
   }, ms);
+}
+function dockAnDieKante(d) {
+  if (!d.nativeEdge || d.hiddenFs || desktopPaused || quitting || d.win.isDestroyed() || !d.win.isVisible()) return;
+  const r = win.windowRect(d.hwnd);
+  if (r && (r.bottom !== d.nativeEdge.bottom || r.left !== d.nativeEdge.x)) win.alignWindowBottom(d.hwnd, d.nativeEdge);
 }
 function autoHideRunde(d, p, over) {
   if (!config.autoHide) {
@@ -1883,6 +1908,9 @@ app.whenReady().then(() => {
         win.keepWindowsTaskbarHidden();
       } catch {}
     }
+    // Leiste an der Bildschirmkante halten: ändert sich die Arbeitsfläche (Ausklappen mit „Fenster machen Platz“,
+    // andere Leisten), schiebt Windows das Dock um den freigehaltenen Platz nach oben – sofort zurücksetzen
+    for (const d of docks.values()) dockAnDieKante(d);
   }, 60);
   setInterval(pollWindows, 700);
   setInterval(refreshClaude, 5 * 60_000);
