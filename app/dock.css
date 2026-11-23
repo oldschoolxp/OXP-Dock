@@ -269,3 +269,19 @@ button.widget:hover > svg { color: var(--text); }
 .jetzt .titel { max-width: var(--np-breite, 200px); }
 .jetzt.mit-hintergrund .titel .gross, .jetzt.mit-hintergrund .titel .klein { text-shadow: 0 1px 3px rgba(0,0,0,.8); }
 .jetzt.mit-hintergrund .titel .klein { color: rgba(255,255,255,.75); }
+
+/* ---------- Automatisch ausblenden ---------- */
+/* Ausfahren (~2,2 s): erst kommt nur der Würfel-Teil der Leiste von unten hoch, dann klappt sie nach rechts auf */
+body.autohide #bar {
+  clip-path: inset(-200px -20px -20px -20px);
+  transition: transform .75s cubic-bezier(.2, 1.35, .45, 1), clip-path 1.45s cubic-bezier(.25, .8, .25, 1) .75s, width .25s ease-out;
+}
+body.autohide #start img { transition: transform .75s cubic-bezier(.2, 1.35, .45, 1), filter .75s; }
+/* Einfahren (schneller): erst zuklappen, dann nach unten weg */
+body.autohide.eingefahren #bar {
+  transform: translateY(calc(100% + 14px));
+  clip-path: inset(-200px var(--wuerfel-rest, calc(100% - 56px)) -20px -20px);
+  transition: clip-path .5s cubic-bezier(.5, 0, .75, 0), transform .4s cubic-bezier(.5, 0, .75, 0) .45s, width .25s ease-out;
+}
+body.autohide.eingefahren #start img { transform: rotate(-90deg) scale(.7); filter: drop-shadow(0 0 0 transparent); }
+body.autohide.eingefahren #tip { opacity: 0 !important; }

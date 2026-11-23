@@ -5,7 +5,7 @@ const allowedInvoke = new Set([
   "live-menu", "stream-menu", "dropped-files", "reorder-pin", "popup-size", "popup-close", "preview-show", "preview-hide", "preview-activate", "preview-close-window", "widget-popup", "widget-action", "widget-popup-refresh", "shelf-drag",
   "settings-load", "update-check", "lizenz-status", "lizenz-pruefen", "lizenz-eingeben", "settings-save", "settings-move-pin", "settings-remove-pin", "settings-add-pin", "settings-import-windows-pins", "quit",
 ]);
-const allowedOn = new Set(["windows", "pins", "widget", "config", "settings-state", "update-status", "lizenz-status", "mouse-left-bar", "popup-view", "preview-closed", "icons"]);
+const allowedOn = new Set(["windows", "pins", "widget", "config", "settings-state", "update-status", "lizenz-status", "mouse-left-bar", "einfahren", "popup-view", "preview-closed", "icons"]);
 
 contextBridge.exposeInMainWorld("dock", {
   invoke: (ch, arg) => (allowedInvoke.has(ch) ? ipcRenderer.invoke(ch, arg) : Promise.reject(new Error("nicht erlaubt"))),

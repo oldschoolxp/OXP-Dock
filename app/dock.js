@@ -431,6 +431,8 @@ function applyLook() {
   if (typeof l.opacity === "number") root.setProperty("--deckkraft", Math.round(l.opacity * 100) + "%");
   document.body.classList.toggle("magnify", !!l.magnify);
   document.body.classList.toggle("vollbreit", !!l.fullWidth);
+  document.body.classList.toggle("autohide", !!state.config.autoHide);
+  wuerfelBreite();
   letzteBreite = "";
   requestAnimationFrame(barMelden);
 }
@@ -613,3 +615,20 @@ api.on("widget", ({ key, value }) => {
   OXPWidgets.datenDa(key);
 });
 setInterval(() => renderClaude(), 60_000); // Restzeit aktuell halten
+
+// ---------- Automatisch ausblenden: Würfel kommt hoch, dann klappt die Leiste vom Würfel aus auf ----------
+// Wie breit der sichtbare Teil am Anfang ist (Rand der Leiste bis rechts neben den Würfel)
+function wuerfelBreite() {
+  const bar = $("bar").getBoundingClientRect();
+  const s = $("start").getBoundingClientRect();
+  if (bar.width) document.documentElement.style.setProperty("--wuerfel-rest", Math.max(0, Math.round(bar.right - s.right - 4)) + "px");
+}
+new ResizeObserver(wuerfelBreite).observe($("bar"));
+api.on("einfahren", (ein) => {
+  wuerfelBreite();
+  if (ein) {
+    hideTip();
+    resetMagnify();
+  }
+  document.body.classList.toggle("eingefahren", !!ein);
+});

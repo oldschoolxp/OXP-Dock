@@ -41,6 +41,7 @@ api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) 
   $("hideWindowsTaskbar").checked = config.hideWindowsTaskbar;
   $("autostart").checked = config.autostart;
   $("allMonitors").checked = config.allMonitors !== false;
+  $("autoHide").checked = !!config.autoHide;
   $("ownStartMenu").checked = config.ownStartMenu !== false;
   $("autoUpdate").checked = config.autoUpdate !== false;
   const l = config.look;
@@ -180,7 +181,7 @@ $("presets").addEventListener("click", (e) => {
 // ---------- Allgemein, Daten ----------
 for (const id of ["channel", "weatherCity"]) $(id).addEventListener("change", () => api.invoke("settings-save", { [id]: $(id).value }));
 $("streamScope").addEventListener("change", () => api.invoke("settings-save", { streamScope: $("streamScope").value }));
-for (const id of ["hideWindowsTaskbar", "autostart", "allMonitors", "ownStartMenu", "autoUpdate"]) $(id).addEventListener("change", () => api.invoke("settings-save", { [id]: $(id).checked }));
+for (const id of ["hideWindowsTaskbar", "autostart", "allMonitors", "autoHide", "ownStartMenu", "autoUpdate"]) $(id).addEventListener("change", () => api.invoke("settings-save", { [id]: $(id).checked }));
 $("quit").addEventListener("click", () => api.invoke("quit"));
 
 // ---------- Programme (per Ziehen sortieren) ----------

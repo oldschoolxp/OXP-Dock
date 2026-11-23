@@ -84,6 +84,7 @@ const defaults = {
   displayAus: {}, // Bildschirme ohne Leiste (Bildschirm-ID -> true)
   look: { barColor: "#18151f", accent: "#8f3cff", opacity: 0.94, scale: 1, magnify: false, magnifyLevel: 1.6, previews: true, fullWidth: false },
   autoUpdate: true, // beim Start und alle paar Stunden nach neuen Versionen sehen
+  autoHide: false, // Leiste einfahren und erst an der unteren Bildschirmkante wieder ausfahren
 };
 let config = loadConfig();
 if (!Array.isArray(config.widgetOrder)) {
@@ -510,7 +511,9 @@ function placeEntry(d, fg = win.foregroundWindow()) {
     return;
   }
   try {
-    win.reserveBottom(d.hwnd, bounds, Math.round(h * display.scaleFactor), APPBAR_MSG);
+    // eingefahrene Leiste: wie die automatisch ausgeblendete Windows-Taskleiste keinen Platz freihalten
+    if (config.autoHide) win.releaseBottom(d.hwnd);
+    else win.reserveBottom(d.hwnd, bounds, Math.round(h * display.scaleFactor), APPBAR_MSG);
   } catch (e) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
@@ -534,13 +537,50 @@ function placeEntry(d, fg = win.foregroundWindow()) {
 
 // Maus nur dort abfangen, wo die Leiste ist – darüber gehen Klicks an die Fenster dahinter.
 // Per Mauszeiger-Abfrage statt Maus-Ereignissen, damit auch Ziehen aus dem Explorer aufs Dock klappt.
+// ---------- Automatisch ausblenden ----------
+// Eingefahren: Maus an die untere Bildschirmkante → Leiste fährt aus (Würfel kommt hoch, Leiste klappt auf).
+// Ausgefahren: Maus weg von der Leiste (und kein Widget-Fenster/Menü offen) → nach kurzer Zeit wieder einfahren.
+const AUSFAHREN_MS = 2300; // so lange dauert die Animation in der Leiste
+const EINFAHREN_NACH_MS = 1200;
+function einfahren(d, ein) {
+  if (d.win.isDestroyed()) return;
+  d.eingefahren = ein;
+  d.ausfahrenSeit = ein ? 0 : Date.now();
+  d.wegSeit = 0;
+  d.win.webContents.send("einfahren", ein);
+}
+function autoHideRunde(d, p, over) {
+  if (!config.autoHide) {
+    if (d.eingefahren) einfahren(d, false);
+    return over;
+  }
+  if (d.eingefahren === undefined) einfahren(d, true);
+  const disp = displayById(d.displayId);
+  if (!disp) return over;
+  const b = disp.bounds;
+  if (d.eingefahren) {
+    // ganz unten an der Kante dieses Bildschirms?
+    if (p.x >= b.x && p.x < b.x + b.width && p.y >= b.y + b.height - 2 && p.y < b.y + b.height + 2) einfahren(d, false);
+    return false; // eingefahren ist die Leiste durchklickbar
+  }
+  const r = d.barRect;
+  const bx = d.barX || { x: r.x, width: r.width };
+  // großzügiger Bereich: Leiste plus etwas darüber (vergrößerte Symbole, Namens-Blasen) und die untere Kante
+  const nah = p.x >= bx.x - 30 && p.x < bx.x + bx.width + 30 && p.y >= r.y - 70 && p.y <= b.y + b.height + 2;
+  const offen = (popupState?.entry === d && popup && !popup.isDestroyed() && popup.isVisible()) || d.menuOffen;
+  if (nah || offen || Date.now() - d.ausfahrenSeit < AUSFAHREN_MS) d.wegSeit = 0;
+  else if (!d.wegSeit) d.wegSeit = Date.now();
+  else if (Date.now() - d.wegSeit > EINFAHREN_NACH_MS) einfahren(d, true);
+  return over;
+}
+
 function updateMousePassThrough() {
   const p = screen.getCursorScreenPoint();
   for (const d of docks.values()) {
     if (d.win.isDestroyed() || !d.barRect) continue;
     const r = d.barRect;
     const bx = d.barX || { x: r.x, width: r.width };
-    const over = p.x >= bx.x && p.x < bx.x + bx.width && p.y >= r.y + 4 && p.y <= r.y + r.height;
+    const over = autoHideRunde(d, p, p.x >= bx.x && p.x < bx.x + bx.width && p.y >= r.y + 4 && p.y <= r.y + r.height);
     const ignore = !over;
     if (ignore === d.ignoring) continue;
     d.ignoring = ignore;
@@ -602,6 +642,7 @@ function createDock(display) {
     d.ready = true;
     placeEntry(d);
   });
+  w.webContents.on("did-finish-load", () => d.eingefahren !== undefined && w.webContents.send("einfahren", d.eingefahren));
   // Wurde das Dock schon vor dem ersten Zeichnen versteckt (Vollbild beim Start, z. B. Remotedesktop),
   // kommt „ready-to-show“ nie – dann bliebe die Leiste für immer unsichtbar.
   w.webContents.once("did-finish-load", () =>
@@ -982,11 +1023,13 @@ function showMenu(template) {
       if (Array.isArray(it.submenu)) neu.submenu = markieren(it.submenu);
       return neu;
     });
+  entry.menuOffen = true;
   w.setFocusable(true);
   w.focus();
   Menu.buildFromTemplate(markieren(template)).popup({
     window: w,
     callback: () => {
+      entry.menuOffen = false;
       w.setFocusable(false);
       w.blur();
       // nur wenn nichts gewählt wurde zum vorherigen Fenster zurück – sonst würde z. B. die Einstellung gleich wieder verdeckt
@@ -1179,7 +1222,7 @@ function pushAll() {
 
 function publicConfig() {
   const widgets = Object.fromEntries(config.widgetOrder.map((id) => [id, true]));
-  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, startMenu: config.startMenu, autoUpdate: config.autoUpdate !== false, autostart: config.autostart, streamScope: config.streamScope };
+  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, startMenu: config.startMenu, autoUpdate: config.autoUpdate !== false, autoHide: !!config.autoHide, autostart: config.autostart, streamScope: config.streamScope };
 }
 
 // ---------- Claude-Nutzungslimit ----------
@@ -1584,6 +1627,11 @@ ipcMain.handle("settings-save", (_e, patch) => {
     const ORDNER = ["dokumente", "downloads", "bilder", "musik", "videos", "persoenlich", "netzwerk", "explorer", "einstellungen"];
     if (Array.isArray(s.ordner)) m.ordner = ORDNER.filter((o) => s.ordner.includes(o));
     if (s.pinsZuruecksetzen) delete config.startPins; // beim nächsten Öffnen neu vorbelegt
+  }
+  if (typeof patch.autoHide === "boolean" && patch.autoHide !== !!config.autoHide) {
+    config.autoHide = patch.autoHide;
+    for (const d of docks.values()) einfahren(d, patch.autoHide);
+    setTimeout(placeDock, 100); // Platz freigeben bzw. wieder reservieren
   }
   if (typeof patch.allMonitors === "boolean" && patch.allMonitors !== config.allMonitors) {
     config.allMonitors = patch.allMonitors;
