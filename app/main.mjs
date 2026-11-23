@@ -85,6 +85,7 @@ const defaults = {
   look: { barColor: "#18151f", accent: "#8f3cff", opacity: 0.94, scale: 1, magnify: false, magnifyLevel: 1.6, previews: true, fullWidth: false },
   autoUpdate: true, // beim Start und alle paar Stunden nach neuen Versionen sehen
   autoHide: false, // Leiste einfahren und erst an der unteren Bildschirmkante wieder ausfahren
+  autoHidePlatz: false, // ausgeklappt: false = über den Fenstern, true = Fenster machen Platz wie bei der festen Leiste
 };
 let config = loadConfig();
 if (!Array.isArray(config.widgetOrder)) {
@@ -511,9 +512,11 @@ function placeEntry(d, fg = win.foregroundWindow()) {
     return;
   }
   try {
-    // eingefahrene Leiste: wie die automatisch ausgeblendete Windows-Taskleiste keinen Platz freihalten
-    if (config.autoHide) win.releaseBottom(d.hwnd);
-    else win.reserveBottom(d.hwnd, bounds, Math.round(h * display.scaleFactor), APPBAR_MSG);
+    // eingefahrene Leiste: wie die automatisch ausgeblendete Windows-Taskleiste keinen Platz freihalten.
+    // Ausgeklappt nur dann Platz, wenn „Fenster machen Platz“ gewählt ist.
+    d.platz = { bounds, hoehe: Math.round(h * display.scaleFactor) };
+    if (config.autoHide && !(config.autoHidePlatz && d.eingefahren === false)) win.releaseBottom(d.hwnd);
+    else win.reserveBottom(d.hwnd, bounds, d.platz.hoehe, APPBAR_MSG);
   } catch (e) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
@@ -548,6 +551,19 @@ function einfahren(d, ein) {
   d.ausfahrenSeit = ein ? 0 : Date.now();
   d.wegSeit = 0;
   d.win.webContents.send("einfahren", ein);
+  // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
+  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs) {
+    clearTimeout(d.platzTimer);
+    try {
+      if (!ein) win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
+      else
+        d.platzTimer = setTimeout(() => {
+          if (d.eingefahren && !d.win.isDestroyed()) win.releaseBottom(d.hwnd);
+        }, 300);
+    } catch (e) {
+      console.error("Platz beim Aus-/Einklappen:", e);
+    }
+  }
 }
 function autoHideRunde(d, p, over) {
   if (!config.autoHide) {
@@ -1222,7 +1238,7 @@ function pushAll() {
 
 function publicConfig() {
   const widgets = Object.fromEntries(config.widgetOrder.map((id) => [id, true]));
-  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, startMenu: config.startMenu, autoUpdate: config.autoUpdate !== false, autoHide: !!config.autoHide, autostart: config.autostart, streamScope: config.streamScope };
+  return { widgets, widgetOrder: config.widgetOrder, widgetSettings: config.widgetSettings, widgetOptions: config.widgetOptions || {}, look: config.look, channel: config.channel, weatherCity: config.weatherCity, hideWindowsTaskbar: config.hideWindowsTaskbar, allMonitors: config.allMonitors, ownStartMenu: config.ownStartMenu !== false, startMenu: config.startMenu, autoUpdate: config.autoUpdate !== false, autoHide: !!config.autoHide, autoHidePlatz: !!config.autoHidePlatz, autostart: config.autostart, streamScope: config.streamScope };
 }
 
 // ---------- Claude-Nutzungslimit ----------
@@ -1627,6 +1643,10 @@ ipcMain.handle("settings-save", (_e, patch) => {
     const ORDNER = ["dokumente", "downloads", "bilder", "musik", "videos", "persoenlich", "netzwerk", "explorer", "einstellungen"];
     if (Array.isArray(s.ordner)) m.ordner = ORDNER.filter((o) => s.ordner.includes(o));
     if (s.pinsZuruecksetzen) delete config.startPins; // beim nächsten Öffnen neu vorbelegt
+  }
+  if (typeof patch.autoHidePlatz === "boolean" && patch.autoHidePlatz !== !!config.autoHidePlatz) {
+    config.autoHidePlatz = patch.autoHidePlatz;
+    setTimeout(placeDock, 100);
   }
   if (typeof patch.autoHide === "boolean" && patch.autoHide !== !!config.autoHide) {
     config.autoHide = patch.autoHide;

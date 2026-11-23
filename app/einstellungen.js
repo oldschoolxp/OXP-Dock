@@ -42,6 +42,8 @@ api.on("settings-state", ({ config, displays, pins, catalog, groups, version }) 
   $("autostart").checked = config.autostart;
   $("allMonitors").checked = config.allMonitors !== false;
   $("autoHide").checked = !!config.autoHide;
+  $("autoHidePlatz").value = config.autoHidePlatz ? "1" : "0";
+  $("autoHidePlatzRow").hidden = !config.autoHide;
   $("ownStartMenu").checked = config.ownStartMenu !== false;
   $("autoUpdate").checked = config.autoUpdate !== false;
   const l = config.look;
@@ -442,3 +444,5 @@ api.on("update-status", (z) => {
 });
 
 api.invoke("settings-load");
+
+$("autoHidePlatz").addEventListener("change", () => api.invoke("settings-save", { autoHidePlatz: $("autoHidePlatz").value === "1" }));
