@@ -10,6 +10,7 @@ const shell32 = koffi.load("shell32.dll");
 const kernel32 = koffi.load("kernel32.dll");
 const dwmapi = koffi.load("dwmapi.dll");
 const advapi32 = koffi.load("advapi32.dll");
+const gdi32 = koffi.load("gdi32.dll");
 
 const RECT = koffi.struct("RECT", { left: "int32", top: "int32", right: "int32", bottom: "int32" });
 const APPBARDATA = koffi.struct("APPBARDATA", {
@@ -337,6 +338,20 @@ function trayWindows() {
 let savedState = null;
 
 /** Normale Taskleiste auf „automatisch ausblenden“ stellen und verstecken. Gibt den alten Zustand zurück. */
+// ---------- Windows-Taskleiste ganz unsichtbar ----------
+// Automatisch ausgeblendet zeigt Windows die Taskleiste trotzdem, sobald die Maus die untere Kante berührt.
+// Deshalb bekommt sie zusätzlich eine winzige Fensterregion außerhalb ihrer Fläche: selbst wenn Windows sie
+// einblendet, ist nichts davon zu sehen und sie nimmt keine Klicks an. Beim Beenden wird die Region entfernt.
+const SetWindowRgn = user32.func("int __stdcall SetWindowRgn(intptr_t hWnd, intptr_t hRgn, bool bRedraw)");
+const GetWindowRgnBox = user32.func("int __stdcall GetWindowRgnBox(intptr_t hWnd, _Out_ RECT *lprc)");
+const CreateRectRgn = gdi32.func("intptr_t __stdcall CreateRectRgn(int x1, int y1, int x2, int y2)");
+function taskleisteUnsichtbar(t) {
+  const r = {};
+  // schon „unsere“ Region (1×1 Pixel außerhalb, bei -2/-2)? Dann nichts tun
+  if (GetWindowRgnBox(t, r) === 2 && r.left === -2 && r.top === -2) return;
+  SetWindowRgn(t, CreateRectRgn(-2, -2, -1, -1), true); // die Region gehört danach Windows, kein Freigeben nötig
+}
+
 export function hideWindowsTaskbar() {
   const tray = trayWindows()[0];
   if (!tray) return null;
@@ -347,13 +362,19 @@ export function hideWindowsTaskbar() {
   // nur ändern, wenn nötig – jedes ABM_SETSTATE meldet allen Programmen eine neue Arbeitsfläche
   // (eine Remotedesktop-Verbindung über mehrere Bildschirme fällt dann auf einen Bildschirm zurück)
   if ((jetzt & ABS_AUTOHIDE) !== ABS_AUTOHIDE) SHAppBarMessage(ABM_SETSTATE, abd);
-  for (const t of trayWindows()) ShowWindow(t, SW_HIDE);
+  for (const t of trayWindows()) {
+    ShowWindow(t, SW_HIDE);
+    taskleisteUnsichtbar(t);
+  }
   return savedState;
 }
 
 /** Wird regelmäßig aufgerufen: Windows blendet die Taskleiste z. B. beim Startmenü gern wieder ein. */
 export function keepWindowsTaskbarHidden() {
-  for (const t of trayWindows()) if (IsWindowVisible(t)) ShowWindow(t, SW_HIDE);
+  for (const t of trayWindows()) {
+    if (IsWindowVisible(t)) ShowWindow(t, SW_HIDE);
+    taskleisteUnsichtbar(t); // z. B. nach einem Neustart von Explorer wieder setzen
+  }
 }
 
 export function restoreWindowsTaskbar(previousState) {
@@ -362,7 +383,10 @@ export function restoreWindowsTaskbar(previousState) {
   const state = previousState ?? savedState ?? 0;
   const abd = { cbSize: koffi.sizeof(APPBARDATA), hWnd: tray, uCallbackMessage: 0, uEdge: 0, rc: { left: 0, top: 0, right: 0, bottom: 0 }, lParam: state };
   SHAppBarMessage(ABM_SETSTATE, abd);
-  for (const t of trayWindows()) ShowWindow(t, SW_SHOW);
+  for (const t of trayWindows()) {
+    SetWindowRgn(t, 0, true); // Region entfernen: Taskleiste wieder ganz sichtbar
+    ShowWindow(t, SW_SHOW);
+  }
   savedState = null;
 }
 
