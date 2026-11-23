@@ -119,7 +119,8 @@ function bildschirmeZeichnen(displays, config) {
     zeile.className = "row";
     zeile.innerHTML = `<span>${esc(d.name)}<small>${esc(d.size)} · <span class="wert">${eigen ? wert + " %" : "wie oben (" + wert + " %)"}</span></small></span>
       <span style="display:flex;align-items:center;gap:10px"><label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" class="eigen"${eigen ? " checked" : ""}>eigene</label>
-      <input type="range" class="groesse" min="75" max="150" step="5" value="${wert}"${eigen ? "" : " disabled"}></span>`;
+      <input type="range" class="groesse" min="75" max="150" step="5" value="${wert}"${eigen && !d.aus ? "" : " disabled"}>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px" title="Leiste auf diesem Bildschirm – aus: dort weder Dock noch Windows-Taskleiste"><input type="checkbox" class="schalter leiste"${d.aus ? "" : " checked"}${!d.aus && displays.filter((x) => !x.aus).length <= 1 ? " disabled" : ""}>Leiste</label></span>`;
     const regler = zeile.querySelector(".groesse");
     const haken = zeile.querySelector(".eigen");
     const anzeige = zeile.querySelector(".wert");
@@ -131,6 +132,7 @@ function bildschirmeZeichnen(displays, config) {
     });
     regler.addEventListener("input", () => ((ziehen = true), (anzeige.textContent = regler.value + " %")));
     regler.addEventListener("change", () => ((ziehen = false), speichern()));
+    zeile.querySelector(".leiste").addEventListener("change", (e) => api.invoke("settings-save", { displayAus: { id: d.id, aus: !e.target.checked } }));
     liste.append(zeile);
   }
 }
@@ -412,10 +414,12 @@ function lizenzZeigen(s) {
   if (s.key && !$("lizenzKey").value) $("lizenzKey").placeholder = s.key;
 }
 $("lizenzKey").addEventListener("input", () => {
+  // Schlüssel säubern: alles außer Buchstaben/Ziffern weg, ein vorangestelltes „DOCK“ nur einmal – egal ob
+  // getippt, mit Bindestrichen, Leerzeichen oder Zeilenumbruch eingefügt
   const roh = $("lizenzKey").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const ohne = roh.startsWith("DOCK") ? roh.slice(4) : roh;
-  const teile = ["DOCK", ohne.slice(0, 4), ohne.slice(4, 8), ohne.slice(8, 12)].filter((t, i) => i === 0 || t);
-  $("lizenzKey").value = roh ? teile.join("-") : "";
+  if ("DOCK".startsWith(roh)) return; // „D“, „DO“, „DOC“ – noch am Tippen, nichts umbauen
+  const ohne = (roh.startsWith("DOCK") ? roh.slice(4) : roh).slice(0, 12);
+  $("lizenzKey").value = ["DOCK", ohne.slice(0, 4), ohne.slice(4, 8), ohne.slice(8, 12)].filter((t, i) => i === 0 || t).join("-");
 });
 $("lizenzLos").addEventListener("click", async () => {
   $("lizenzMeldung").textContent = "Prüfe …";

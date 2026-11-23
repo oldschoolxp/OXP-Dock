@@ -80,6 +80,7 @@ const defaults = {
   widgetSettings: {}, // Einstellungen einzelner Widgets (z. B. Weltuhren, Kurse)
   widgetOptions: {}, // Optionen aus dem Reiter „Widget-Einstellungen“ (siehe widget-optionen.mjs)
   displayScale: {}, // eigene Größe je Bildschirm (Bildschirm-ID -> 0.75 … 1.5), fehlt = allgemeine Größe
+  displayAus: {}, // Bildschirme ohne Leiste (Bildschirm-ID -> true)
   look: { barColor: "#18151f", accent: "#8f3cff", opacity: 0.94, scale: 1, magnify: false, magnifyLevel: 1.6, previews: true, fullWidth: false },
   autoUpdate: true, // beim Start und alle paar Stunden nach neuen Versionen sehen
 };
@@ -455,7 +456,9 @@ function entryAtCursor() {
 /** Docks mit den angeschlossenen Bildschirmen abgleichen und alle neu ausrichten. */
 function placeDock() {
   if (lizenzGesperrt || desktopPaused || quitting) return;
-  const wanted = config.allMonitors ? screen.getAllDisplays() : [screen.getPrimaryDisplay()];
+  // je Bildschirm abschaltbar (dort dann weder Dock noch Windows-Taskleiste); eine Leiste bleibt immer
+  let wanted = (config.allMonitors ? screen.getAllDisplays() : [screen.getPrimaryDisplay()]).filter((x) => !config.displayAus?.[String(x.id)]);
+  if (!wanted.length) wanted = [screen.getPrimaryDisplay()];
   const ids = new Set(wanted.map((d) => d.id));
   for (const [id, d] of docks) {
     if (ids.has(id)) continue;
@@ -557,7 +560,9 @@ function createDock(display) {
     show: false,
     title: "OXP Dock",
     icon: path.join(here, "assets", "icon.ico"),
-    webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true },
+    // eigener Bereich je Bildschirm: Chromium merkt sich die Vergrößerung pro Adresse – sonst übernähmen alle Leisten
+    // (und das Einstellungsfenster) die Größe, die zuletzt irgendwo gesetzt wurde
+    webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true, partition: "oxp-leiste-" + display.id },
   });
   const d = { win: w, hwnd: Number(w.getNativeWindowHandle().readBigUInt64LE(0)), displayId: display.id, barRect: null, ignoring: null, hiddenFs: false, ready: false };
   docks.set(display.id, d);
@@ -755,7 +760,7 @@ function createPopup() {
     show: false,
     title: "OXP Dock Popup",
     paintWhenInitiallyHidden: true,
-    webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true, backgroundThrottling: false, partition: "oxp-popup" },
   });
   popup.setAlwaysOnTop(true, "screen-saver", 1);
   popup.loadFile(path.join(here, "popup.html"));
@@ -887,6 +892,19 @@ function dockStoppen() {
   dock = null;
   if (taskbarHidden) showTaskbar();
 }
+/** Rechtsklick in Eingabefeldern: Ausschneiden, Kopieren, Einfügen (Electron hat dafür kein eigenes Menü). */
+function bearbeitenMenue(w) {
+  w.webContents.on("context-menu", (_e, p) => {
+    if (!p.isEditable) return;
+    Menu.buildFromTemplate([
+      { label: "Ausschneiden", role: "cut", enabled: p.editFlags.canCut },
+      { label: "Kopieren", role: "copy", enabled: p.editFlags.canCopy },
+      { label: "Einfügen", role: "paste", enabled: p.editFlags.canPaste },
+      { type: "separator" },
+      { label: "Alles auswählen", role: "selectAll" },
+    ]).popup({ window: w });
+  });
+}
 function lizenzFenster() {
   if (lizenzWin && !lizenzWin.isDestroyed()) return lizenzWin.show(), lizenzWin.focus();
   lizenzWin = new BrowserWindow({
@@ -900,6 +918,7 @@ function lizenzFenster() {
     icon: path.join(here, "assets", "icon.ico"),
     webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true },
   });
+  bearbeitenMenue(lizenzWin);
   lizenzWin.loadFile(path.join(here, "lizenz.html"));
 }
 function lizenzAnwenden(s) {
@@ -1507,6 +1526,7 @@ function openSettings() {
     icon: path.join(here, "assets", "icon.ico"),
     webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, sandbox: true },
   });
+  bearbeitenMenue(settingsWin);
   settingsWin.loadFile(path.join(here, "einstellungen.html"));
 }
 
@@ -1524,6 +1544,7 @@ async function sendSettingsState() {
       name: `Bildschirm ${i + 1}${d.id === prim ? " (Haupt)" : ""}${d.label ? " · " + d.label : ""}`,
       size: `${Math.round(d.size.width * d.scaleFactor)} × ${Math.round(d.size.height * d.scaleFactor)}`,
       scale: typeof config.displayScale?.[String(d.id)] === "number" ? config.displayScale[String(d.id)] : null,
+      aus: !!config.displayAus?.[String(d.id)],
     }));
   settingsWin.webContents.send("settings-state", { config: publicConfig(), displays, pins, catalog: baukasten.catalog.map((w) => ({ ...w, options: WIDGET_OPTIONEN[w.id] || [] })), groups: GROUPS, version: app.getVersion() });
 }
@@ -1579,6 +1600,15 @@ ipcMain.handle("settings-save", (_e, patch) => {
   }
   if (patch.widgetOptionsReset && typeof patch.widgetOptionsReset === "string" && config.widgetOptions) delete config.widgetOptions[patch.widgetOptionsReset];
   // eigene Größe für einen Bildschirm (scale: null = wieder die allgemeine Größe)
+  if (patch.displayAus && /^-?\d+$/.test(String(patch.displayAus.id)) && typeof patch.displayAus.aus === "boolean") {
+    const id = String(patch.displayAus.id);
+    config.displayAus ||= {};
+    if (patch.displayAus.aus) config.displayAus[id] = true;
+    else delete config.displayAus[id];
+    // nie alle abschalten
+    if (screen.getAllDisplays().every((x) => config.displayAus[String(x.id)])) delete config.displayAus[id];
+    setTimeout(placeDock, 50);
+  }
   if (patch.displayScale && /^-?\d+$/.test(String(patch.displayScale.id))) {
     const { id, scale } = patch.displayScale;
     config.displayScale ||= {};

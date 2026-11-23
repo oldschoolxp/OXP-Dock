@@ -71,6 +71,8 @@ export async function pruefen(neuerSchluessel) {
   const key = (neuerSchluessel ?? gespeichert.key ?? "").trim().toUpperCase();
   // nur zum Testen: abgelaufene Testphase vortäuschen (ein eingegebener Schlüssel wird trotzdem echt geprüft)
   if (process.env.OXP_DOCK_LIZENZ === "abgelaufen" && !key) return { valid: false, trial: true, expiresAt: null, reason: "expired", key: "" };
+  // nur im Entwicklungsmodus (nicht in der installierten Version): ohne Server-Prüfung starten, z. B. zum Testen von Oberflächen
+  if (!app.isPackaged && process.env.OXP_DOCK_LIZENZ === "test") return { valid: true, trial: false, expiresAt: null, reason: null, key: "TEST" };
   let antwort;
   try {
     const r = await fetch(`${WEBSITE}/api/dock/license`, {

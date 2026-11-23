@@ -13,10 +13,12 @@ function anzeigen(s) {
 }
 // automatisch Bindestriche setzen: DOCK-XXXX-XXXX-XXXX
 $("key").addEventListener("input", () => {
+  // Schlüssel säubern: alles außer Buchstaben/Ziffern weg, ein vorangestelltes „DOCK“ nur einmal – egal ob
+  // getippt, mit Bindestrichen, Leerzeichen oder Zeilenumbruch eingefügt
   const roh = $("key").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const ohne = roh.startsWith("DOCK") ? roh.slice(4) : roh;
-  const teile = ["DOCK", ohne.slice(0, 4), ohne.slice(4, 8), ohne.slice(8, 12)].filter((t, i) => i === 0 || t);
-  $("key").value = roh ? teile.join("-") : "";
+  if ("DOCK".startsWith(roh)) return; // „D“, „DO“, „DOC“ – noch am Tippen, nichts umbauen
+  const ohne = (roh.startsWith("DOCK") ? roh.slice(4) : roh).slice(0, 12);
+  $("key").value = ["DOCK", ohne.slice(0, 4), ohne.slice(4, 8), ohne.slice(8, 12)].filter((t, i) => i === 0 || t).join("-");
 });
 async function freischalten() {
   const key = $("key").value.trim();

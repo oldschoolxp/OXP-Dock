@@ -1,6 +1,6 @@
 # OXP Dock
 
-Version 1.3.7 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
+Version 1.3.8 · Windows 10/11 · [Download (neueste Version)](https://github.com/oldschoolxp/OXP-Dock/releases/latest)
 
 Das Dock aktualisiert sich selbst: Gibt es eine neue Version, fragt es „Jetzt aktualisieren? Ja / Nein“.
 Von Hand: Einstellungen → Info → „Nach Updates suchen“.
