@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Notification, ipcMain, nativeImage } from "electron";
+import { jsonLesen, jsonSchreiben } from "../speicher.mjs";
 
 export default function register(ctx, h) {
   const { app, shell, systemhelfer: sh } = h;
@@ -27,14 +28,24 @@ export default function register(ctx, h) {
   // ---------- eigener Speicher ----------
   const file = path.join(app.getPath("userData"), "zeit-daten.json");
   let store = { todos: [], notes: "", clocks: ["America/New_York", "Asia/Tokyo"], ics: [], screen: {}, shelf: [] };
-  try {
-    store = { ...store, ...JSON.parse(fs.readFileSync(file, "utf8")) };
-  } catch {}
+  const gelesen = jsonLesen(file);
+  if (gelesen) store = { ...store, ...gelesen.daten };
   let saveTimer = null;
+  const jetztSpeichern = () => {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    try {
+      jsonSchreiben(file, store, 1);
+    } catch (e) {
+      console.error("Aufgaben/Notizen speichern fehlgeschlagen:", e.message);
+    }
+  };
   const save = () => {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => fs.writeFileSync(file, JSON.stringify(store, null, 1)), 400);
+    saveTimer = setTimeout(jetztSpeichern, 400);
   };
+  // beim Beenden (z. B. vor einem Update) noch ausstehende Änderungen sofort schreiben
+  app.on("before-quit", () => saveTimer && jetztSpeichern());
   const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   ctx.provide("todos", 60_000, () => store.todos);

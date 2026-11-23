@@ -16,6 +16,7 @@ import { claudeUsage, anmeldungStarten, hatAnmeldung } from "./claude-login.mjs"
 import { WIDGET_OPTIONEN } from "./widget-optionen.mjs";
 import { initUpdater, jetztPruefen, updateZustand } from "./updater.mjs";
 import * as lizenz from "./lizenz.mjs";
+import { jsonLesen, jsonSchreiben } from "./speicher.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Messmodus (nur mit OXP_DOCK_PROFILE=1): wie viel Zeit verbrauchen die wiederkehrenden Aufgaben?
@@ -90,8 +91,12 @@ if (!Array.isArray(config.widgetOrder)) {
 }
 
 function loadConfig() {
+  // sicher lesen: kaputte/fehlende Datei → Zwischendatei oder neueste Sicherung (siehe speicher.mjs)
+  const gelesen = jsonLesen(configPath);
+  if (gelesen && gelesen.quelle !== "datei") console.warn("Einstellungen aus", gelesen.quelle, "wiederhergestellt");
   try {
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    if (!gelesen) throw new Error("keine Einstellungen");
+    const raw = gelesen.daten;
     return { ...defaults, ...raw, widgets: { ...defaults.widgets, ...(raw.widgets || {}) }, look: { ...defaults.look, ...(raw.look || {}) }, startMenu: { ...defaults.startMenu, ...(raw.startMenu || {}) } };
   } catch {
     // Neue Installation: Grundeinrichtung aus standard.json (so, wie das Dock „ab Werk“ aussehen soll)
@@ -104,8 +109,12 @@ function loadConfig() {
   }
 }
 function saveConfig() {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // nie eine halbe Datei: erst Zwischendatei, dann umbenennen; täglich eine Sicherung
+  try {
+    jsonSchreiben(configPath, config);
+  } catch (e) {
+    console.error("Einstellungen speichern fehlgeschlagen:", e.message);
+  }
 }
 
 // ---------- Angeheftete Programme ----------
