@@ -617,7 +617,7 @@ setInterval(() => renderClaude(), 60_000); // Restzeit aktuell halten
 
 // ---------- Automatisch ausblenden ----------
 // Mittig: der OXP-Würfel kommt in der Bildschirmmitte hoch und gleitet an seinen Platz, dann erscheinen die übrigen
-// Teile von der Mitte nach außen, zuletzt der Rahmen um alles (~2,3 s).
+// Teile von der Mitte nach außen, zuletzt der Rahmen um alles (~1,2 s).
 // Ganze Breite: die Leiste gleitet wie bei Windows von unten herein.
 // Nur transform und opacity werden animiert (Web Animations) – kein Neuzeichnen pro Bild, daher flüssig.
 let laufend = [];
@@ -640,14 +640,14 @@ function ausfahren() {
   document.body.classList.remove("eingefahren");
   const bar = $("bar");
   if (document.body.classList.contains("vollbreit")) {
-    laufend.push(bar.animate([{ transform: "translateY(110%)" }, { transform: "none" }], { duration: 260, easing: "cubic-bezier(.15,.85,.25,1)" }));
+    laufend.push(bar.animate([{ transform: "translateY(110%)" }, { transform: "none" }], { duration: 130, easing: "cubic-bezier(.15,.85,.25,1)" }));
     return;
   }
   const mitte = innerWidth / 2;
   const wuerfel = $("start");
   const wr = wuerfel.getBoundingClientRect();
   const dx = mitte - (wr.left + wr.width / 2);
-  // 1. Würfel: in der Mitte hochkommen (0–0,55 s), kurz halten, an seinen Platz gleiten (bis 1,1 s)
+  // 1. Würfel: in der Mitte hochkommen (0–0,27 s), kurz halten, an seinen Platz gleiten (bis 0,6 s)
   laufend.push(
     wuerfel.animate(
       [
@@ -657,10 +657,10 @@ function ausfahren() {
         { transform: `translate(${dx}px, 0) rotate(0) scale(1)`, opacity: 1, offset: 0.55, easing: "cubic-bezier(.45,0,.2,1)" },
         { transform: "none", opacity: 1, offset: 1 },
       ],
-      { duration: 1200, easing: "linear", fill: "backwards" },
+      { duration: 600, easing: "linear", fill: "backwards" },
     ),
   );
-  // 2. übrige Teile: von der Mitte nach außen nacheinander (1,0–1,8 s)
+  // 2. übrige Teile: von der Mitte nach außen nacheinander (0,58–1,0 s)
   const andere = teile().filter((el) => el !== wuerfel);
   const abstand = (el) => {
     const r = el.getBoundingClientRect();
@@ -670,19 +670,19 @@ function ausfahren() {
   for (const el of andere) {
     laufend.push(
       el.animate([{ opacity: 0, transform: "translateY(16px) scale(.55)" }, { opacity: 1, transform: "none" }], {
-        duration: 380,
-        delay: 1150 + (abstand(el) / weitester) * 450,
+        duration: 190,
+        delay: 575 + (abstand(el) / weitester) * 225,
         easing: "cubic-bezier(.2,1.3,.4,1)",
         fill: "backwards",
       }),
     );
   }
-  // 3. zuletzt der Rahmen um alles (1,85–2,35 s)
+  // 3. zuletzt der Rahmen um alles (0,98–1,23 s)
   laufend.push(
     bar.animate([{ opacity: 0, transform: "scale(.985, .8)" }, { opacity: 1, transform: "none" }], {
       pseudoElement: "::before",
-      duration: 500,
-      delay: 1950,
+      duration: 250,
+      delay: 975,
       easing: "cubic-bezier(.2,.8,.2,1)",
       fill: "backwards",
     }),
