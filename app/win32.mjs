@@ -88,11 +88,12 @@ function readText(fn, hwnd) {
 }
 
 const pathBuf = Buffer.alloc(2048);
-const exeCache = new Map(); // pid -> exe path
+const exeCache = new Map(); // pid -> { exe, bis } (läuft ab, weil Prozess-Nummern wiederverwendet werden)
 /** Programmdatei eines Prozesses (für infobereich.mjs). */
 export const exeOfPid = (pid) => exeForPid(pid);
 function exeForPid(pid) {
-  if (exeCache.has(pid)) return exeCache.get(pid);
+  const z = exeCache.get(pid);
+  if (z && z.bis > Date.now()) return z.exe;
   let exe = "";
   const h = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
   if (h) {
@@ -101,7 +102,7 @@ function exeForPid(pid) {
     CloseHandle(h);
   }
   if (exeCache.size > 500) exeCache.clear();
-  exeCache.set(pid, exe);
+  exeCache.set(pid, { exe, bis: Date.now() + 60_000 });
   return exe;
 }
 

@@ -20,3 +20,7 @@ Einzelne Bausteine: `fenster-test.ps1` (Aus-/Einklappen mit Testfenster), `fenst
 Hintergrund: Windows verwirft AppBar-Anmeldungen still (Explorer-Neustart, Entsperren, Ruhezustand, Bildschirmwechsel, andere
 Programme). Früher merkte sich das Dock „angemeldet“ nur selbst und reservierte dann nie wieder Platz. Jetzt wird die Anmeldung
 bei jedem Setzen neu geprüft und ein Wächter (`platzWaechter` in `app/main.mjs`) gleicht Soll und Ist jede Sekunde ab.
+
+
+## Hinweis
+Läuft auf dem Prüf-PC ein echtes Dock mit fester Leiste, reserviert es auf seinem Bildschirm selbst Platz (z. B. 70 px). Die Prüfungen für diesen Bildschirm melden dann "reserviert 70 px, erwartet 0" – das ist Störung durch das echte Dock, kein Fehler. Für saubere Ergebnisse das echte Dock vorher beenden.

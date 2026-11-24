@@ -899,11 +899,12 @@ function fullscreenState(d, fg) {
   return false;
 }
 
+let pollLaeuft = false;
 async function pollWindows() {
-  if (desktopPaused || quitting) return;
+  if (desktopPaused || quitting || pollLaeuft) return; // nie zwei Abfragen gleichzeitig
+  pollLaeuft = true;
   try {
-    if (taskbarHidden) win.keepWindowsTaskbarHidden();
-    const fg = win.foregroundWindow();
+    const fg = win.foregroundWindow(); // (Taskleiste unsichtbar halten übernimmt die 60-ms-Schleife)
     if (fg && !isDockHwnd(fg)) lastForeground = fg;
     if (fg) for (const d of docks.values()) {
       if (fullscreenState(d, fg) !== d.hiddenFs) placeEntry(d, fg);
@@ -945,6 +946,8 @@ async function pollWindows() {
     }
   } catch (e) {
     console.error("Fensterliste:", e);
+  } finally {
+    pollLaeuft = false;
   }
 }
 
@@ -1341,7 +1344,7 @@ const data = { live: null, stream: null, weather: null, system: null, claude: nu
 
 let networkPending = false;
 async function refreshNetwork() {
-  if (networkPending) return;
+  if (networkPending || desktopPaused) return; // gesperrt: nicht messen
   networkPending = true;
   let value;
   try {
@@ -1509,7 +1512,7 @@ async function refreshWeather() {
 
 let lastCpu = os.cpus();
 function refreshSystem() {
-  if (!config.widgetOrder.includes("system")) return; // nur messen, wenn das Widget in der Leiste ist
+  if (desktopPaused || !config.widgetOrder.includes("system")) return; // nur messen, wenn das Widget in der Leiste ist
   const now = os.cpus();
   let idle = 0, total = 0;
   now.forEach((c, i) => {
@@ -1535,7 +1538,7 @@ let gpuQuelle = null; // "nvidia" | "windows" | "keine"
 const ausfuehren = (cmd, args, timeout) =>
   new Promise((res) => execFile(cmd, args, { windowsHide: true, timeout, encoding: "utf8" }, (err, out) => res(err ? null : out || "")));
 async function refreshGpu() {
-  if (gpuLaeuft || !config.widgetOrder.includes("system") || config.widgetOptions?.system?.gpu === false || gpuQuelle === "keine") return;
+  if (desktopPaused || gpuLaeuft || !config.widgetOrder.includes("system") || config.widgetOptions?.system?.gpu === false || gpuQuelle === "keine") return;
   gpuLaeuft = true;
   try {
     if (gpuQuelle !== "windows") {
@@ -1970,10 +1973,29 @@ app.on("before-quit", () => (quitting = true));
 app.on("will-quit", cleanup);
 process.on("exit", cleanup);
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => app.quit());
+// Ein einzelner unerwarteter Fehler (z. B. ein fehlgeschlagener Windows-Aufruf in einem Timer) beendet das Dock nicht mehr.
+// Erst bei gehäuften Fehlern (mehr als 8 in einer Minute) wird sauber aufgeräumt und beendet.
+const fehlerZeiten = [];
+function fehlerProtokoll(e) {
+  try {
+    fs.appendFileSync(path.join(app.getPath("userData"), "fehler.log"), `${new Date().toISOString()} ${e?.stack || e}
+`);
+  } catch {}
+}
 process.on("uncaughtException", (e) => {
   console.error(e);
-  cleanup();
-  app.exit(1);
+  fehlerProtokoll(e);
+  const jetzt = Date.now();
+  fehlerZeiten.push(jetzt);
+  while (fehlerZeiten.length && jetzt - fehlerZeiten[0] > 60_000) fehlerZeiten.shift();
+  if (fehlerZeiten.length > 8) {
+    cleanup();
+    app.exit(1);
+  }
+});
+process.on("unhandledRejection", (e) => {
+  console.error(e);
+  fehlerProtokoll(e);
 });
 
 // ---------- Start ----------
@@ -2009,6 +2031,7 @@ app.whenReady().then(() => {
 
   watchWindowsPins();
   setInterval(() => {
+    if (desktopPaused || quitting) return; // gesperrt/beendet: nichts zu tun
     updateMousePassThrough();
     checkPopupHover();
     // Windows-Taskleiste in kurzen Abständen unsichtbar halten: Explorer stellt sie bei jeder Änderung der
@@ -2027,7 +2050,7 @@ app.whenReady().then(() => {
   refreshClaude();
   setInterval(refreshSystem, 2000);
   refreshGpu();
-  setInterval(refreshGpu, 3000);
+  setInterval(refreshGpu, 5000); // startet einen Messprozess – nicht öfter als nötig
   refreshNetwork();
   setInterval(refreshNetwork, 5000);
   setInterval(refreshLive, 60_000);
