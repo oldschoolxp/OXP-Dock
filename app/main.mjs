@@ -516,8 +516,14 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   try {
     d.platz = { bounds, hoehe: Math.round(h * display.scaleFactor) };
     // Minimierte Remote-Verbindung, die aus der Leiste wiederhergestellt werden soll: Arbeitsfläche so lassen, wie sie ist
-    if (d.rdpWartet && win.isMinimized(d.rdpWartet)) d.platzAngewendet = Date.now();
-    else {
+    if (d.rdpWartet && win.isMinimized(d.rdpWartet)) {
+      // Platz nie NEU reservieren (das würde das Vollbild der Verbindung zerstören) – aber eine liegengebliebene
+      // Reservierung bei eingeklapptem Dock sofort freigeben, sonst maximieren sich andere Fenster nicht mehr ganz
+      if (!sollReserviert(d) && d.platzSoll) {
+        d.platzSoll = false;
+        platzAnwenden(d, "platzieren");
+      } else d.platzAngewendet = Date.now();
+    } else {
       d.rdpWartet = 0;
       d.platzSoll = sollReserviert(d);
       platzAnwenden(d, "platzieren");
@@ -575,7 +581,8 @@ function einfahren(d, ein) {
     d.sendeTimer = setTimeout(pruefen, 15);
   } else senden();
   // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
-  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs && !(d.rdpWartet && win.isMinimized(d.rdpWartet))) {
+  const rdpFrei = ein ? false : !!(d.rdpWartet && win.isMinimized(d.rdpWartet)); // beim Ausklappen nichts reservieren, solange eine Remote minimiert ist
+  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs && !rdpFrei) {
     clearTimeout(d.platzTimer);
     if (!ein) {
       d.platzSoll = true;
