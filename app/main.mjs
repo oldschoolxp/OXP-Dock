@@ -515,8 +515,13 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   }
   try {
     d.platz = { bounds, hoehe: Math.round(h * display.scaleFactor) };
-    d.platzSoll = sollReserviert(d);
-    platzAnwenden(d, "platzieren");
+    // Minimierte Remote-Verbindung, die aus der Leiste wiederhergestellt werden soll: Arbeitsfläche so lassen, wie sie ist
+    if (d.rdpWartet && win.isMinimized(d.rdpWartet)) d.platzAngewendet = Date.now();
+    else {
+      d.rdpWartet = 0;
+      d.platzSoll = sollReserviert(d);
+      platzAnwenden(d, "platzieren");
+    }
   } catch (e) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
@@ -570,7 +575,7 @@ function einfahren(d, ein) {
     d.sendeTimer = setTimeout(pruefen, 15);
   } else senden();
   // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
-  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs) {
+  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs && !(d.rdpWartet && win.isMinimized(d.rdpWartet))) {
     clearTimeout(d.platzTimer);
     if (!ein) {
       d.platzSoll = true;
@@ -880,6 +885,9 @@ function fullscreenState(d, fg) {
       return true;
     }
   }
+  // Remotedesktop im Vollbild wurde gerade minimiert: Arbeitsfläche NICHT ändern, bis die Verbindung wieder da ist.
+  // Jede Änderung (Platz reservieren) lässt sie beim Wiederherstellen ihr Vollbild über alle Bildschirme verlieren.
+  if (d.fsHwnd && win.windowClass(d.fsHwnd) === "TscShellContainerClass" && win.isMinimized(d.fsHwnd)) d.rdpWartet = d.fsHwnd;
   d.fsHwnd = 0;
   return false;
 }

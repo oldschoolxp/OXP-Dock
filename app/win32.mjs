@@ -181,6 +181,11 @@ export function isShownWindow(hwnd) {
   return !!hwnd && !!IsWindow(hwnd) && !!IsWindowVisible(hwnd) && !IsIconic(hwnd);
 }
 
+/** Fenster existiert und ist minimiert? */
+export function isMinimized(hwnd) {
+  return !!hwnd && !!IsWindow(hwnd) && !!IsIconic(hwnd);
+}
+
 export function isMaximized(hwnd) {
   return !!IsZoomed(hwnd);
 }
