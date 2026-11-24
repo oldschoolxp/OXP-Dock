@@ -208,7 +208,16 @@ const SC_MINIMIZE = 0xf020, SC_RESTORE = 0xf120, SC_CLOSE = 0xf060;
 
 export function activate(hwnd) {
   if (!IsWindow(hwnd)) return;
-  if (IsIconic(hwnd)) {
+  if (IsIconic(hwnd) && windowClass(hwnd) === "TscShellContainerClass") {
+    // Remotedesktop: wie die Windows-Taskleiste den Systembefehl "Wiederherstellen" schicken – nur so kehrt die Verbindung
+    // in ihren vorigen Zustand zurueck (Vollbild ueber alle Bildschirme). ShowWindow wuerde sie als normales Fenster oeffnen.
+    PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    setTimeout(() => {
+      try {
+        if (IsWindow(hwnd) && IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+      } catch {}
+    }, 600);
+  } else if (IsIconic(hwnd)) {
     ShowWindow(hwnd, SW_RESTORE);
     if (IsIconic(hwnd)) PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
   }
