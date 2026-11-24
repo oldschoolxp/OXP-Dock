@@ -397,24 +397,28 @@ export function restoreWindowsTaskbar(previousState) {
 
 const registered = new Set();
 
-/** Meldet ein Dock an und reserviert `height` Pixel (physisch) am unteren Rand von `bounds` (physisch). Gibt das endgültige Rechteck zurück. */
+/**
+ * Meldet ein Dock an und reserviert `height` Pixel (physisch) am unteren Rand von `bounds` (physisch).
+ * Die Anmeldung wird bei JEDEM Aufruf neu angefragt (Windows antwortet „schon angemeldet“, wenn sie noch gilt): Explorer-Neustart,
+ * Entsperren, Ruhezustand, Bildschirmwechsel oder andere Programme können sie still verwerfen – ein gemerkter „ist angemeldet“-Wert
+ * wäre dann falsch, und die Fenster würden nie wieder Platz machen.
+ * Gibt das endgültige Rechteck zurück; `neu` ist true, wenn die Anmeldung vorher nicht (mehr) bestand.
+ */
 export function reserveBottom(hwnd, bounds, height, callbackMessage) {
   const base = { cbSize: koffi.sizeof(APPBARDATA), hWnd: hwnd, uCallbackMessage: callbackMessage, uEdge: ABE_BOTTOM, rc: { left: 0, top: 0, right: 0, bottom: 0 }, lParam: 0 };
-  if (!registered.has(hwnd)) {
-    SHAppBarMessage(ABM_NEW, base);
-    registered.add(hwnd);
-  }
+  const neu = Number(SHAppBarMessage(ABM_NEW, base)) !== 0;
+  registered.add(hwnd);
   const abd = { ...base, rc: { left: bounds.x, right: bounds.x + bounds.width, top: bounds.y + bounds.height - height, bottom: bounds.y + bounds.height } };
   SHAppBarMessage(ABM_QUERYPOS, abd);
   abd.rc.top = abd.rc.bottom - height;
   SHAppBarMessage(ABM_SETPOS, abd);
-  return { x: abd.rc.left, y: abd.rc.top, width: abd.rc.right - abd.rc.left, height: abd.rc.bottom - abd.rc.top };
+  return { x: abd.rc.left, y: abd.rc.top, width: abd.rc.right - abd.rc.left, height: abd.rc.bottom - abd.rc.top, neu };
 }
 
-/** Ein Dock abmelden – ohne Angabe alle. */
-export function releaseBottom(hwnd) {
+/** Ein Dock abmelden – ohne Angabe alle. `erzwingen`: auch dann abmelden, wenn wir es nicht (mehr) als angemeldet kennen. */
+export function releaseBottom(hwnd, erzwingen = false) {
   for (const h of hwnd ? [hwnd] : [...registered]) {
-    if (!registered.has(h)) continue;
+    if (!registered.has(h) && !erzwingen) continue;
     SHAppBarMessage(ABM_REMOVE, { cbSize: koffi.sizeof(APPBARDATA), hWnd: h, uCallbackMessage: 0, uEdge: 0, rc: { left: 0, top: 0, right: 0, bottom: 0 }, lParam: 0 });
     registered.delete(h);
   }
@@ -558,6 +562,56 @@ function monitorRect(mon) {
 export function monitorOfWindow(hwnd) {
   return monitorRect(Number(MonitorFromWindow(hwnd, 2))); // MONITOR_DEFAULTTONEAREST
 }
+/** Von Windows reservierte Pixel am unteren Rand des Bildschirms an einem Punkt (Bildschirm unten − Arbeitsfläche unten). */
+export function reserviertUnten(x, y) {
+  const info = { cbSize: koffi.sizeof(MONITORINFO), rcMonitor: {}, rcWork: {}, dwFlags: 0 };
+  const mon = Number(MonitorFromPoint({ x: Math.round(x), y: Math.round(y) }, 2));
+  if (!mon || !GetMonitorInfoW(mon, info)) return null;
+  return info.rcMonitor.bottom - info.rcWork.bottom;
+}
+/** Arbeitsfläche (physische Pixel) des Bildschirms an einem Punkt. */
+export function arbeitsflaecheAt(x, y) {
+  const info = { cbSize: koffi.sizeof(MONITORINFO), rcMonitor: {}, rcWork: {}, dwFlags: 0 };
+  const mon = Number(MonitorFromPoint({ x: Math.round(x), y: Math.round(y) }, 2));
+  if (!mon || !GetMonitorInfoW(mon, info)) return null;
+  const a = info.rcWork;
+  return { x: a.left, y: a.top, width: a.right - a.left, height: a.bottom - a.top };
+}
+
+const RegisterWindowMessageW = user32.func("uint32 __stdcall RegisterWindowMessageW(str16 text)");
+/** Nachrichten-Nummer „TaskbarCreated“ – Explorer schickt sie nach einem Neustart; alle Anmeldungen (AppBars) sind dann weg. */
+export const taskbarCreatedNachricht = () => RegisterWindowMessageW("TaskbarCreated");
+
+/**
+ * Maximierte Fenster auf einem Bildschirm, die der geänderten Arbeitsfläche nicht gefolgt sind (Unterkante weicht ab),
+ * zum Neuberechnen ihres maximierten Rahmens anstoßen. Windows macht das normalerweise selbst; manche Programme verpassen es.
+ * Gibt zurück, wie viele Fenster angestoßen wurden.
+ */
+const extBuf = Buffer.alloc(16);
+export function maximierteNachziehen(arbeit, ownPid) {
+  let angestossen = 0;
+  const FLAGS = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020; // NOSIZE | NOMOVE | NOZORDER | NOACTIVATE | FRAMECHANGED
+  EnumWindows((hwnd) => {
+    try {
+      if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || !IsZoomed(hwnd) || isCloaked(hwnd)) return true;
+      const pid = [0];
+      GetWindowThreadProcessId(hwnd, pid);
+      if (pid[0] === ownPid) return true;
+      if (DwmGetWindowAttribute(hwnd, 9, extBuf, 16) !== 0) return true; // DWMWA_EXTENDED_FRAME_BOUNDS
+      const links = extBuf.readInt32LE(0), oben = extBuf.readInt32LE(4), rechts = extBuf.readInt32LE(8), unten = extBuf.readInt32LE(12);
+      // liegt das Fenster auf diesem Bildschirm (Mitte in der Arbeitsfläche-Breite und oben an der Arbeitsfläche)?
+      const mitte = (links + rechts) / 2;
+      if (mitte < arbeit.x || mitte >= arbeit.x + arbeit.width) return true;
+      if (Math.abs(links - arbeit.x) > 16 || Math.abs(oben - arbeit.y) > 16) return true;
+      if (Math.abs(unten - (arbeit.y + arbeit.height)) <= 3) return true; // passt
+      SetWindowPos(hwnd, 0, 0, 0, 0, 0, FLAGS);
+      angestossen++;
+    } catch {}
+    return true;
+  }, 0);
+  return angestossen;
+}
+
 /** Bildschirm (physische Pixel) an einem Punkt. */
 export function monitorAt(x, y) {
   return monitorRect(Number(MonitorFromPoint({ x: Math.round(x), y: Math.round(y) }, 2)));

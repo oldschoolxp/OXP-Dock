@@ -27,7 +27,8 @@ function sicherungen(datei) {
   }
 }
 const parse = (f) => {
-  const t = fs.readFileSync(f, "utf8");
+  // ein Byte-Order-Zeichen am Anfang (z. B. von Editor/PowerShell gespeichert) macht JSON.parse ungültig
+  const t = fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "");
   if (!t.trim()) throw new Error("leer");
   return JSON.parse(t);
 };

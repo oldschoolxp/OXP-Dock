@@ -465,6 +465,7 @@ function entryAtCursor() {
 }
 
 /** Docks mit den angeschlossenen Bildschirmen abgleichen und alle neu ausrichten. */
+let taskbarCreatedTimer = null;
 function placeDock() {
   if (lizenzGesperrt || desktopPaused || quitting) return;
   // je Bildschirm abschaltbar (dort dann weder Dock noch Windows-Taskleiste); eine Leiste bleibt immer
@@ -504,19 +505,18 @@ function placeEntry(d, fg = win.foregroundWindow()) {
     // Arbeitsfläche lässt die Verbindung ihr Vollbild neu aufbauen, dann landet sie nur noch auf einem Bildschirm.
     if (d.fsHwnd && win.windowClass(d.fsHwnd) === "TscShellContainerClass" && !win.isMaximized(d.fsHwnd)) return;
     // Sonst die Windows-Arbeitsfläche freigeben, damit Vollbild nicht auf die kleinere Fläche zurückfällt.
+    d.platzSoll = false;
     try {
-      win.releaseBottom(d.hwnd);
+      win.releaseBottom(d.hwnd, true);
     } catch (e) {
       console.error("Platz freigeben fehlgeschlagen:", e);
     }
     return;
   }
   try {
-    // eingefahrene Leiste: wie die automatisch ausgeblendete Windows-Taskleiste keinen Platz freihalten.
-    // Ausgeklappt nur dann Platz, wenn „Fenster machen Platz“ gewählt ist.
     d.platz = { bounds, hoehe: Math.round(h * display.scaleFactor) };
-    if (config.autoHide && !(config.autoHidePlatz && d.eingefahren === false)) win.releaseBottom(d.hwnd);
-    else win.reserveBottom(d.hwnd, bounds, d.platz.hoehe, APPBAR_MSG);
+    d.platzSoll = sollReserviert(d);
+    platzAnwenden(d, "platzieren");
   } catch (e) {
     console.error("Platz reservieren fehlgeschlagen:", e);
   }
@@ -572,22 +572,99 @@ function einfahren(d, ein) {
   // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
   if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs) {
     clearTimeout(d.platzTimer);
-    try {
-      if (!ein) {
-        win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
-        taskleisteNachziehen();
-        // Windows verschiebt das Fenster kurz danach – gleich mehrmals zurücksetzen, damit nichts zu sehen ist
-        for (const ms of [0, 10, 25, 40, 60, 90, 130, 200, 300]) setTimeout(() => dockAnDieKante(d), ms);
-      }
-      else
-        d.platzTimer = setTimeout(() => {
-          if (d.eingefahren && !d.win.isDestroyed()) {
-            win.releaseBottom(d.hwnd);
-            taskleisteNachziehen();
-          }
-        }, 300);
-    } catch (e) {
-      console.error("Platz beim Aus-/Einklappen:", e);
+    if (!ein) {
+      d.platzSoll = true;
+      platzAnwenden(d, "ausklappen");
+      taskleisteNachziehen();
+      // Windows verschiebt das Fenster kurz danach – gleich mehrmals zurücksetzen, damit nichts zu sehen ist
+      for (const ms of [0, 10, 25, 40, 60, 90, 130, 200, 300]) setTimeout(() => dockAnDieKante(d), ms);
+    } else {
+      d.platzTimer = setTimeout(() => {
+        if (d.eingefahren && !d.win.isDestroyed()) {
+          d.platzSoll = sollReserviert(d);
+          platzAnwenden(d, "einklappen");
+          taskleisteNachziehen();
+        }
+      }, 300);
+    }
+  }
+}
+
+// ---------- Platz für Fenster (Arbeitsfläche) ----------
+// Sollzustand an EINER Stelle: soll die Leiste gerade Platz freihalten?
+function sollReserviert(d) {
+  if (d.hiddenFs) return false; // Vollbild: Platz freigeben
+  if (!config.autoHide) return true; // feste Leiste
+  return !!(config.autoHidePlatz && d.eingefahren === false); // ausgeblendet: nur ausgeklappt und nur wenn gewünscht
+}
+
+/** Setzt die Reservierung auf d.platzSoll (idempotent). Die Anmeldung bei Windows wird dabei immer geprüft/erneuert. */
+function platzAnwenden(d, grund = "") {
+  if (!d.platz || d.win.isDestroyed()) return;
+  try {
+    if (d.platzSoll) {
+      const r = win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
+      if (r.neu && grund === "wächter") console.warn("Platz: Anmeldung bei Windows war verloren – neu angemeldet");
+    } else win.releaseBottom(d.hwnd, grund === "wächter");
+    d.platzAngewendet = Date.now();
+    // Fenster, die der neuen Arbeitsfläche nicht gefolgt sind, kurz danach anstoßen
+    clearTimeout(d.nachziehTimer);
+    d.nachziehTimer = setTimeout(() => {
+      try {
+        const a = win.arbeitsflaecheAt(d.platz.bounds.x + d.platz.bounds.width / 2, d.platz.bounds.y + d.platz.bounds.height / 2);
+        if (a && !d.hiddenFs) {
+          const n = win.maximierteNachziehen(a, process.pid);
+          if (n) console.warn("Platz: " + n + " maximierte(s) Fenster angestoßen");
+        }
+      } catch {}
+    }, 700);
+  } catch (e) {
+    console.error("Platz anwenden fehlgeschlagen:", e);
+  }
+}
+
+/**
+ * Wächter: Windows verwirft Anmeldungen still (Explorer-Neustart, Entsperren, Ruhezustand, Bildschirmwechsel, andere
+ * Programme). Stimmt die tatsächlich reservierte Höhe nicht mit dem Sollzustand überein, wird neu angemeldet.
+ */
+function waechterHeilt(d) {
+  const jetzt = Date.now();
+  d.heilungen = (d.heilungen || []).filter((t) => jetzt - t < 120_000);
+  d.heilungen.push(jetzt);
+  // bei mehr als 3 Heilungen in 2 Minuten: Abstände verlängern, statt ewig neu anzumelden (z. B. wenn ein anderes Programm dagegenhält)
+  if (d.heilungen.length > 3) d.waechterPause = jetzt + Math.min(30_000, 2000 * 2 ** (d.heilungen.length - 3));
+  platzAnwenden(d, "wächter");
+}
+function platzWaechter() {
+  if (desktopPaused || quitting) return;
+  for (const d of docks.values()) {
+    if (d.win.isDestroyed() || !d.platz || d.platzSoll === undefined) continue;
+    if (d.hiddenFs) continue; // Vollbild (u. a. Remotedesktop über mehrere Bildschirme): Arbeitsfläche nicht anfassen
+    if (Date.now() - (d.platzAngewendet || 0) < 1200) continue; // frisch gesetzt: erst ausklingen lassen
+    if (Date.now() < (d.waechterPause || 0)) continue; // Rückzug nach wiederholten Fehlschlägen
+    const cx = d.platz.bounds.x + d.platz.bounds.width / 2;
+    const cy = d.platz.bounds.y + d.platz.bounds.height / 2;
+    const ist = win.reserviertUnten(cx, cy);
+    if (ist === null) continue;
+    if (d.platzSoll) {
+      if (ist < d.platz.hoehe - 2) {
+        d.platzFehler = (d.platzFehler || 0) + 1;
+        if (d.platzFehler >= 2) {
+          d.platzFehler = 0;
+          waechterHeilt(d);
+        }
+      } else d.platzFehler = 0;
+    } else {
+      // Aus: mehr als die Fremdreservierung (z. B. eine andere Leiste) darf nicht reserviert sein
+      if (d.fremd === undefined || ist < d.fremd) d.fremd = ist;
+      if (ist > d.fremd + 2) {
+        d.platzFehler2 = (d.platzFehler2 || 0) + 1;
+        if (d.platzFehler2 >= 2) {
+          d.platzFehler2 = 0;
+          waechterHeilt(d);
+          d.fremd = ist; // ab jetzt als Fremdreservierung hinnehmen
+        }
+      } else d.platzFehler2 = 0;
     }
   }
 }
@@ -674,6 +751,22 @@ function createDock(display) {
   w.setAlwaysOnTop(true, "screen-saver");
   w.loadFile(path.join(here, "dock.html"));
   // Windows meldet über diese Nachricht, wenn sich Taskleisten verschieben.
+  // Explorer wurde neu gestartet: alle Anmeldungen sind weg – Platz neu anmelden und Windows-Taskleiste wieder verstecken
+  try {
+    w.hookWindowMessage(win.taskbarCreatedNachricht(), () => {
+      // alle Docks bekommen die Nachricht – nur einmal reagieren
+      if (taskbarCreatedTimer) return;
+      console.warn("Explorer neu gestartet (TaskbarCreated) – Platz und Taskleiste neu setzen");
+      taskbarCreatedTimer = setTimeout(() => {
+        taskbarCreatedTimer = null;
+        if (quitting) return;
+        if (config.hideWindowsTaskbar && taskbarHidden) win.hideWindowsTaskbar();
+        placeDock();
+      }, 800);
+    });
+  } catch (e) {
+    console.error("TaskbarCreated:", e.message);
+  }
   w.hookWindowMessage(APPBAR_MSG, (wParam) => {
     // ABN_POSCHANGED – nur gelegentlich nachziehen, sonst lösen sich mehrere Docks gegenseitig endlos aus
     if (wParam.readUInt32LE(0) === 1 && Date.now() - (d.placedAt || 0) > 1500) placeEntry(d);
@@ -1889,6 +1982,8 @@ app.whenReady().then(() => {
   });
   powerMonitor.on("lock-screen", pauseDesktop);
   powerMonitor.on("unlock-screen", resumeDesktop);
+  powerMonitor.on("resume", () => setTimeout(() => !desktopPaused && placeDock(), 2500)); // nach dem Ruhezustand alles neu setzen
+  setInterval(platzWaechter, 1000);
   screen.on("display-metrics-changed", (_event, _display, metrics) => {
     // Die eigene AppBar-Reservierung ändert die Arbeitsfläche, nicht die Bildschirmmaße.
     if (metrics.some((metric) => metric !== "workArea")) setTimeout(placeDock, 200);
