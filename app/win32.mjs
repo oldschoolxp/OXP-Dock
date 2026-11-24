@@ -597,6 +597,8 @@ export function maximierteNachziehen(arbeit, ownPid) {
       const pid = [0];
       GetWindowThreadProcessId(hwnd, pid);
       if (pid[0] === ownPid) return true;
+      // Remotedesktop und Vollbild-Fenster nie anstossen: jede Aenderung laesst die Verbindung ihr Vollbild neu aufbauen
+      if (windowClass(hwnd) === "TscShellContainerClass" || !isFramedMaximized(hwnd)) return true;
       if (DwmGetWindowAttribute(hwnd, 9, extBuf, 16) !== 0) return true; // DWMWA_EXTENDED_FRAME_BOUNDS
       const links = extBuf.readInt32LE(0), oben = extBuf.readInt32LE(4), rechts = extBuf.readInt32LE(8), unten = extBuf.readInt32LE(12);
       // liegt das Fenster auf diesem Bildschirm (Mitte in der Arbeitsfläche-Breite und oben an der Arbeitsfläche)?
