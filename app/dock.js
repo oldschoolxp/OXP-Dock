@@ -11,13 +11,22 @@ window.OXPesc = esc;
 
 // ---------- feste Knöpfe ----------
 // Klick: OXP-Startmenü über dem Würfel (bzw. Windows-Startmenü, wenn in den Einstellungen so gewählt)
-$("start").addEventListener("click", () => {
+// Lage ohne laufende Animationen (beim Öffnen per Windows-Taste klappt die Leiste evtl. gerade erst aus)
+function lage(el) {
+  let x = 0, y = 0;
+  for (let e = el; e; e = e.offsetParent) {
+    x += e.offsetLeft;
+    y += e.offsetTop;
+  }
+  return { left: x, top: y, width: el.offsetWidth, height: el.offsetHeight };
+}
+// „mitte“ (b): die ganze Leiste – das Startmenü öffnet sich dann mittig darüber (wie bei Windows 11)
+function startOeffnen(r, b) {
   hideTip();
-  const r = $("start").getBoundingClientRect();
-  // „mitte“: die ganze Leiste – das Startmenü öffnet sich dann mittig darüber (wie bei Windows 11)
-  const b = $("bar").getBoundingClientRect();
   api.invoke("start-menu", { x: r.left, y: r.top, width: r.width, height: r.height, mitte: { x: b.left, y: r.top, width: b.width, height: r.height } });
-});
+}
+$("start").addEventListener("click", () => startOeffnen($("start").getBoundingClientRect(), $("bar").getBoundingClientRect()));
+api.on("start-taste", () => startOeffnen(lage($("start")), lage($("bar"))));
 $("start").addEventListener("contextmenu", (e) => { e.preventDefault(); api.invoke("start-menu-context"); });
 // Lupe, „^“ und Uhr öffnen eigene Fenster über der Leiste.
 const fensterAuf = (id, el) => {

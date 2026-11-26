@@ -239,6 +239,99 @@ namespace OxpDock {
 '@ -ReferencedAssemblies System.Drawing
 
 # ---------- WinRT-Hilfen (WLAN/Bluetooth, Medien) ----------
+# Windows-Taste: allein gedrückt soll sie das OXP-Startmenü öffnen statt das von Windows. Eigener Faden mit
+# Tastatur-Haken; Kombinationen (Win+E, Win+L …) bleiben unverändert.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+
+namespace OxpDock {
+  public static class WinTaste {
+    delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential)] struct KBD { public uint vk; public uint scan; public uint flags; public uint time; public IntPtr extra; }
+    [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort vk; public ushort scan; public uint flags; public uint time; public IntPtr extra; public uint pad1; public uint pad2; }
+    [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public KEYBDINPUT ki; }
+    [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int x; public int y; }
+    [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr mod, uint thread);
+    [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr h, int code, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] static extern int GetMessage(out MSG m, IntPtr h, uint min, uint max);
+    [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int max);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
+
+    static readonly IntPtr MARKE = new IntPtr(0x4F585044); // eigene Tastendrücke erkennen
+    static HookProc proc; // festhalten, sonst räumt .NET den Rückruf weg
+    static Thread faden;
+    static volatile bool an;
+    static bool unten, kombiniert;
+
+    public static void Setzen(bool ein) {
+      an = ein;
+      if (!ein || faden != null) return;
+      faden = new Thread(Lauf);
+      faden.IsBackground = true; // endet mit dem Helfer
+      faden.Priority = ThreadPriority.AboveNormal;
+      faden.Start();
+    }
+    static void Lauf() {
+      proc = Haken;
+      if (SetWindowsHookEx(13, proc, GetModuleHandle(null), 0) == IntPtr.Zero) return;
+      MSG m;
+      while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
+    }
+    static bool Gedrueckt(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+    // Remotedesktop im Vollbild: die Windows-Taste gehört der Verbindung
+    static bool RemoteVollbild() {
+      IntPtr h = GetForegroundWindow();
+      var s = new StringBuilder(64);
+      GetClassName(h, s, 64);
+      return s.ToString() == "TscShellContainerClass" && (GetWindowLongPtr(h, -16).ToInt64() & 0x00C00000) != 0x00C00000;
+    }
+    static INPUT Taste(ushort vk, bool hoch, bool erweitert) {
+      var i = new INPUT();
+      i.type = 1;
+      i.ki.vk = vk;
+      i.ki.flags = (hoch ? 2u : 0u) | (erweitert ? 1u : 0u);
+      i.ki.extra = MARKE;
+      return i;
+    }
+    static IntPtr Haken(int code, IntPtr wParam, IntPtr lParam) {
+      try {
+        if (code >= 0) {
+          var k = (KBD)Marshal.PtrToStructure(lParam, typeof(KBD));
+          if (k.extra != MARKE) {
+            int w = wParam.ToInt32();
+            bool runter = w == 0x100 || w == 0x104, hoch = w == 0x101 || w == 0x105;
+            if (k.vk == 0x5B || k.vk == 0x5C) {
+              if (runter && !Gedrueckt((int)k.vk)) { // neuer Druck (keine Wiederholung)
+                unten = an && !RemoteVollbild();
+                kombiniert = Gedrueckt(0x10) || Gedrueckt(0x11) || Gedrueckt(0x12) || Gedrueckt(k.vk == 0x5B ? 0x5C : 0x5B);
+              } else if (hoch && unten) {
+                unten = false;
+                if (!kombiniert && an) {
+                  // Loslassen ersetzen: erst eine unbelegte Taste, dann das Loslassen – so öffnet Windows sein Menü nicht
+                  var folge = new INPUT[] { Taste(0xE8, false, false), Taste(0xE8, true, false), Taste((ushort)k.vk, true, true) };
+                  if (SendInput(3, folge, Marshal.SizeOf(typeof(INPUT))) == 3) {
+                    ThreadPool.QueueUserWorkItem(delegate { Console.Out.WriteLine("{\"event\":\"wintaste\"}"); Console.Out.Flush(); });
+                    return new IntPtr(1);
+                  }
+                }
+              }
+            } else if (runter && unten) kombiniert = true;
+          }
+        }
+      } catch { }
+      return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+    }
+  }
+}
+'@
+
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $script:asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
 function Await($op, [Type]$type) {
@@ -567,6 +660,7 @@ function Handle($req) {
       }
       @{ running = $true; unread = $inbox.UnReadItemCount; latest = $neu }
     }
+    'wintaste' { [OxpDock.WinTaste]::Setzen([bool]$a.an); @{ an = [bool]$a.an } }
     default { throw "Unbekannter Befehl: $($req.cmd)" }
   }
 }

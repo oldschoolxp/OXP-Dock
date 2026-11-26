@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import readline from "node:readline";
 
-export function createSystemhelfer(appDir) {
+export function createSystemhelfer(appDir, { onEvent, onReady } = {}) {
   // Im Installer liegt der Helfer entpackt neben dem app.asar (PowerShell kann nicht in asar lesen).
   const script = path.join(appDir.replace(/app\.asar(?=[\\/]|$)/, "app.asar.unpacked"), "helfer", "systemhelfer.ps1");
   let proc = null;
@@ -29,7 +29,12 @@ export function createSystemhelfer(appDir) {
       } catch {
         return;
       }
-      if (msg.ready) return resolveReady(true);
+      if (msg.ready) {
+        resolveReady(true);
+        onReady?.(); // auch nach einem Neustart des Helfers
+        return;
+      }
+      if (msg.event) return onEvent?.(msg.event);
       const p = pending.get(msg.id);
       if (!p) return;
       pending.delete(msg.id);

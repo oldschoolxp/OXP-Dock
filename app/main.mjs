@@ -1025,6 +1025,8 @@ function placePopup(width, height) {
   if (popupState.sticky) {
     popup.show();
     popup.focus();
+    // per Windows-Taste geöffnet: Windows gibt den Fokus sonst nicht her – Tippen soll gleich in der Suche landen
+    if (popupState.key === "w:start" && Date.now() - startTasteZeit < 2000) win.activate(Number(popup.getNativeWindowHandle().readBigUInt64LE(0)));
   } else popup.showInactive();
   popup.setAlwaysOnTop(true, "screen-saver", 1);
 }
@@ -1262,7 +1264,35 @@ ipcMain.handle("preview-close-window", (_e, hwnd) => win.close(hwnd));
 
 // ---------- Widget-Baukasten ----------
 
-const systemhelfer = createSystemhelfer(here);
+const systemhelfer = createSystemhelfer(here, {
+  onEvent: (name) => name === "wintaste" && windowsTaste(),
+  onReady: () => windowsTasteAbgleichen(),
+});
+
+// ---------- Windows-Taste: öffnet das OXP-Startmenü ----------
+let startTasteZeit = 0;
+let startVorher = 0; // Fenster, das vor dem Öffnen vorn war
+function windowsTasteAbgleichen() {
+  const an = !lizenzGesperrt && !quitting && config.ownStartMenu !== false && docks.size > 0;
+  systemhelfer.call("wintaste", { an }, 10_000).catch((e) => console.error("Windows-Taste:", e.message));
+}
+function windowsTaste() {
+  if (desktopPaused || quitting) return;
+  // zweiter Druck: schließen und zurück zum vorigen Fenster
+  if (popupState?.key === "w:start") {
+    hidePopup();
+    if (win.isShownWindow(startVorher)) win.activate(startVorher);
+    return;
+  }
+  // Leiste unter der Maus, sonst irgendeine sichtbare (nicht auf abgeschalteten oder Vollbild-Bildschirmen)
+  const nutzbar = (d) => d && !d.hiddenFs && d.ready && !d.win.isDestroyed();
+  const d = [entryAtCursor(), ...docks.values()].find(nutzbar);
+  if (!d) return win.openStartMenu(); // z. B. Vollbild-Programm: dann das Windows-Startmenü
+  startTasteZeit = Date.now();
+  startVorher = win.foregroundWindow();
+  if (config.autoHide && d.eingefahren) einfahren(d, false);
+  d.win.webContents.send("start-taste", true);
+}
 const baukasten = createBaukasten({ send: (ch, p) => send(ch, p), getConfig: () => config });
 {
   const w = baukasten.ctx.widget;
@@ -1781,7 +1811,10 @@ ipcMain.handle("settings-save", (_e, patch) => {
   if (typeof patch.hideWindowsTaskbar === "boolean") config.hideWindowsTaskbar = patch.hideWindowsTaskbar;
   if (typeof patch.autostart === "boolean") config.autostart = patch.autostart;
   if (typeof patch.autoUpdate === "boolean") config.autoUpdate = patch.autoUpdate;
-  if (typeof patch.ownStartMenu === "boolean") config.ownStartMenu = patch.ownStartMenu;
+  if (typeof patch.ownStartMenu === "boolean") {
+    config.ownStartMenu = patch.ownStartMenu;
+    windowsTasteAbgleichen();
+  }
   if (patch.startMenu && typeof patch.startMenu === "object") {
     const s = patch.startMenu;
     const m = (config.startMenu = { ...defaults.startMenu, ...(config.startMenu || {}) });
@@ -2021,6 +2054,8 @@ app.whenReady().then(() => {
   powerMonitor.on("unlock-screen", resumeDesktop);
   powerMonitor.on("resume", () => setTimeout(() => !desktopPaused && placeDock(), 2500)); // nach dem Ruhezustand alles neu setzen
   setInterval(platzWaechter, 1000);
+  windowsTasteAbgleichen();
+  setInterval(windowsTasteAbgleichen, 15_000); // folgt Einstellung und Lizenz
   screen.on("display-metrics-changed", (_event, _display, metrics) => {
     // Die eigene AppBar-Reservierung ändert die Arbeitsfläche, nicht die Bildschirmmaße.
     if (metrics.some((metric) => metric !== "workArea")) setTimeout(placeDock, 200);
