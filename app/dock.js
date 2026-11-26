@@ -462,6 +462,8 @@ function relative(date) {
 function renderLive() {
   const el = $("w-live");
   const v = state.widgets.live;
+  // Der Würfel pulsiert, sobald irgendwer live ist (du oder ein Partner) – auch ohne Live-Widget
+  $("start").classList.toggle("live", !!(v && (v.own?.isLive || v.liveOthers?.length)));
   el.hidden = !state.config.widgets.live || !v;
   if (el.hidden) return;
   const own = v.own;
