@@ -1,7 +1,7 @@
 // OXP Dock – Hauptprozess.
 // Ein schmales, immer sichtbares Fenster am unteren Bildschirmrand ersetzt die Windows-Taskleiste:
 // OX-Startknopf, angeheftete Programme, offene Fenster und Live-Widgets.
-import { app, BrowserWindow, ipcMain, powerMonitor, screen, shell, Menu, dialog, nativeImage, Notification } from "electron";
+import { app, BaseWindow, BrowserWindow, ipcMain, powerMonitor, screen, shell, Menu, dialog, nativeImage, Notification } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -534,6 +534,7 @@ function placeEntry(d, fg = win.foregroundWindow()) {
   // Fenster ist um tipSpace höher als der reservierte Bereich – dieser obere Teil ist durchklickbar.
   const total = h + tipSpace(d.displayId);
   d.barRect = { x: display.bounds.x, y: display.bounds.y + display.bounds.height - h, width: display.bounds.width, height: h };
+  dockSichern(d);
   // Die Leiste liegt am Bildschirmrand. Ihre eigene AppBar verkleinert die Arbeitsfläche darüber.
   d.nativeEdge = { x: bounds.x, bottom: bounds.y + bounds.height };
   d.win.setBounds({ x: display.bounds.x, y: display.bounds.y + display.bounds.height - total, width: display.bounds.width, height: total });
@@ -554,12 +555,8 @@ function placeEntry(d, fg = win.foregroundWindow()) {
 // ---------- Automatisch ausblenden ----------
 // Eingefahren: Maus an die untere Bildschirmkante → Leiste fährt aus (Würfel kommt hoch, Leiste klappt auf).
 // Ausgefahren: Maus weg von der Leiste (und kein Widget-Fenster/Menü offen) → nach kurzer Zeit wieder einfahren.
-const AUSFAHREN_MS = 1700; // so lange dauert die Animation in der Leiste (~1,2 s), gerechnet ab ihrem Start
+const AUSFAHREN_MS = 1700; // so lange dauert die Animation in der Leiste (~1,2 s, bei „Platz machen“ bis 0,4 s später)
 const EINFAHREN_NACH_MS = 1200;
-// Warten auf Windows’ Verschieben, bevor die Animation startet: gezählt wird nur Zeit, in der das Dock reagieren
-// konnte (während Windows die Arbeitsfläche umstellt, hängt es kurz – das Verschieben kommt erst danach an)
-const SCHUB_WARTEN_MS = 500;
-const SCHUB_HOECHSTENS_MS = 2000;
 function einfahren(d, ein) {
   if (d.win.isDestroyed()) return;
   d.eingefahren = ein;
@@ -567,38 +564,33 @@ function einfahren(d, ein) {
   d.wegSeit = 0;
   clearTimeout(d.sendeTimer);
   const senden = () => !d.win.isDestroyed() && d.win.webContents.send("einfahren", d.eingefahren);
-  const rdpFrei = ein ? false : !!(d.rdpWartet && win.isMinimized(d.rdpWartet)); // beim Ausklappen nichts reservieren, solange eine Remote minimiert ist
-  const mitPlatz = config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs && !rdpFrei;
-  // Bei „Fenster machen Platz“ schiebt Windows das Dock nach dem Reservieren nach oben – je nach Auslastung erst nach
-  // bis zu einer halben Sekunde. Die Animation startet deshalb erst, wenn das passiert und das Dock wieder unten ist.
-  if (!ein && mitPlatz) {
-    const frei = win.reserviertUnten(d.platz.bounds.x + d.platz.bounds.width / 2, d.platz.bounds.y + d.platz.bounds.height / 2);
-    const schubErwartet = (frei ?? 0) < d.platz.hoehe - 2; // ist der Platz schon reserviert, wird nichts verschoben
+  // Bei „Fenster machen Platz“ erst den Platz reservieren und die Animation einen Moment später starten:
+  // Windows schiebt das Dock nach der Reservierung kurz nach oben – das soll passieren, solange es noch unsichtbar ist
+  const erstPlatz = !ein && config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs;
+  if (erstPlatz) {
+    // warten, bis Windows das Fenster verschoben und das Dock es zurückgesetzt hat (ruhig an der Kante), höchstens 0,4 s
     const start = Date.now();
-    d.geschoben = 0;
-    let zuletzt = start;
-    let reagiert = 0; // Zeit ohne die Hänger
+    let ruhig = 0;
     const pruefen = () => {
       if (d.eingefahren || d.win.isDestroyed()) return;
       dockAnDieKante(d);
-      const jetzt = Date.now();
-      reagiert += Math.min(jetzt - zuletzt, 20);
-      zuletzt = jetzt;
-      const ruhig = schubErwartet ? d.geschoben && jetzt - d.geschoben >= 60 : jetzt - start >= 140;
-      if (ruhig || reagiert >= SCHUB_WARTEN_MS || jetzt - start >= SCHUB_HOECHSTENS_MS) {
-        d.ausfahrenSeit = Date.now(); // die Animation beginnt jetzt
-        senden();
-      } else d.sendeTimer = setTimeout(pruefen, 8);
+      const r = win.windowRect(d.hwnd);
+      ruhig = r && d.nativeEdge && r.bottom === d.nativeEdge.bottom ? ruhig + 1 : 0;
+      if ((Date.now() - start >= 140 && ruhig >= 3) || Date.now() - start > 400) senden();
+      else d.sendeTimer = setTimeout(pruefen, 15);
     };
-    d.sendeTimer = setTimeout(pruefen, 8);
+    d.sendeTimer = setTimeout(pruefen, 15);
   } else senden();
   // „Fenster machen Platz“: beim Ausklappen sofort Platz freihalten, beim Einklappen erst nach der Animation freigeben
-  if (mitPlatz) {
+  const rdpFrei = ein ? false : !!(d.rdpWartet && win.isMinimized(d.rdpWartet)); // beim Ausklappen nichts reservieren, solange eine Remote minimiert ist
+  if (config.autoHide && config.autoHidePlatz && d.platz && !d.hiddenFs && !rdpFrei) {
     clearTimeout(d.platzTimer);
     if (!ein) {
       d.platzSoll = true;
       platzAnwenden(d, "ausklappen");
       taskleisteNachziehen();
+      // Windows verschiebt das Fenster kurz danach – gleich mehrmals zurücksetzen, damit nichts zu sehen ist
+      for (const ms of [0, 10, 25, 40, 60, 90, 130, 200, 300]) setTimeout(() => dockAnDieKante(d), ms);
     } else {
       d.platzTimer = setTimeout(() => {
         if (d.eingefahren && !d.win.isDestroyed()) {
@@ -626,7 +618,6 @@ function platzAnwenden(d, grund = "") {
     if (d.platzSoll) {
       const r = win.reserveBottom(d.hwnd, d.platz.bounds, d.platz.hoehe, APPBAR_MSG);
       if (r.neu && grund === "wächter") console.warn("Platz: Anmeldung bei Windows war verloren – neu angemeldet");
-      dockFolgen(d); // Windows verschiebt das Dock kurz danach
     } else win.releaseBottom(d.hwnd, grund === "wächter");
     d.platzAngewendet = Date.now();
     // Fenster, die der neuen Arbeitsfläche nicht gefolgt sind, kurz danach anstoßen
@@ -702,20 +693,7 @@ function taskleisteNachziehen() {
 function dockAnDieKante(d) {
   if (!d.nativeEdge || d.hiddenFs || desktopPaused || quitting || d.win.isDestroyed() || !d.win.isVisible()) return;
   const r = win.windowRect(d.hwnd);
-  if (!r || (r.bottom === d.nativeEdge.bottom && r.left === d.nativeEdge.x)) return;
-  if (r.bottom < d.nativeEdge.bottom) d.geschoben = Date.now(); // von Windows hochgeschoben
-  win.alignWindowBottom(d.hwnd, d.nativeEdge);
-}
-// nach dem Reservieren gut zwei Sekunden lang sehr dicht nachsehen, damit ein Hochschieben sofort zurückgenommen wird
-function dockFolgen(d) {
-  d.folgenBis = Date.now() + 2200;
-  if (d.folgen) return;
-  d.folgen = setInterval(() => {
-    if (Date.now() > d.folgenBis || d.win.isDestroyed()) {
-      clearInterval(d.folgen);
-      d.folgen = null;
-    } else dockAnDieKante(d);
-  }, 8);
+  if (r && (r.bottom !== d.nativeEdge.bottom || r.left !== d.nativeEdge.x)) win.alignWindowBottom(d.hwnd, d.nativeEdge);
 }
 function autoHideRunde(d, p, over) {
   if (!config.autoHide) {
@@ -757,6 +735,18 @@ function updateMousePassThrough() {
   }
 }
 
+// Unsichtbares Fenster, dem alle Leisten „gehören“ (siehe win32.gegenVerschiebenSichern). Wird nie geschlossen –
+// mit ihm würde Windows auch die Leisten schließen.
+let dockBesitzer = null;
+function dockSichern(d) {
+  try {
+    if (!dockBesitzer || dockBesitzer.isDestroyed()) dockBesitzer = new BaseWindow({ show: false, skipTaskbar: true, focusable: false, width: 1, height: 1 });
+    win.gegenVerschiebenSichern(d.hwnd, Number(dockBesitzer.getNativeWindowHandle().readBigUInt64LE(0)));
+  } catch (e) {
+    console.error("Leiste gegen Verschieben sichern:", e.message);
+  }
+}
+
 function createDock(display) {
   const w = new BrowserWindow({
     width: 800,
@@ -783,6 +773,7 @@ function createDock(display) {
   });
   const d = { win: w, hwnd: Number(w.getNativeWindowHandle().readBigUInt64LE(0)), displayId: display.id, barRect: null, ignoring: null, hiddenFs: false, ready: false };
   docks.set(display.id, d);
+  dockSichern(d);
   w.setAlwaysOnTop(true, "screen-saver");
   w.loadFile(path.join(here, "dock.html"));
   // Windows meldet über diese Nachricht, wenn sich Taskleisten verschieben.
@@ -813,7 +804,7 @@ function createDock(display) {
     setImmediate(() => {
       try {
         if (!desktopPaused && !quitting && !d.hiddenFs && d.nativeEdge && !w.isDestroyed()) {
-          dockAnDieKante(d);
+          win.alignWindowBottom(d.hwnd, d.nativeEdge);
         }
       } finally {
         d.positionQueued = false;

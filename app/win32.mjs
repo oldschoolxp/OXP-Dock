@@ -158,6 +158,25 @@ export function alignWindowBottom(hwnd, { x, bottom }) {
   return SetWindowPos(hwnd, 0, x, bottom - (r.bottom - r.top), 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
+const SetWindowLongPtrW = user32.func("intptr_t __stdcall SetWindowLongPtrW(intptr_t hWnd, int index, intptr_t value)");
+const GWL_HWNDPARENT = -8;
+const WS_POPUP = 0x80000000n;
+
+/**
+ * Dock-Fenster davor schützen, beim Reservieren von Platz hochgeschoben zu werden („Leiste springt kurz hoch“).
+ * Es schieben zwei unabhängig voneinander – beide müssen abgestellt sein:
+ *  - Windows selbst, außer bei Werkzeugfenstern (WS_EX_TOOLWINDOW)
+ *  - Chromium (passt Fenster ohne Besitzer in die neue Arbeitsfläche ein), außer das Fenster ist ein Popup mit Besitzer
+ * Ändert nur, was fehlt – kann bei jedem Platzieren aufgerufen werden.
+ */
+export function gegenVerschiebenSichern(hwnd, besitzer) {
+  const stil = BigInt.asUintN(32, BigInt(GetWindowLongPtrW(hwnd, GWL_STYLE)));
+  if (!(stil & WS_POPUP)) SetWindowLongPtrW(hwnd, GWL_STYLE, Number(BigInt.asIntN(32, stil | WS_POPUP)));
+  if (Number(GetWindowLongPtrW(hwnd, GWL_HWNDPARENT)) !== besitzer) SetWindowLongPtrW(hwnd, GWL_HWNDPARENT, besitzer);
+  const ex = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+  if (!(ex & WS_EX_TOOLWINDOW) || ex & 0x40000 /* WS_EX_APPWINDOW */) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~0x40000);
+}
+
 export function windowClass(hwnd) {
   return readText(GetClassNameW, hwnd);
 }
