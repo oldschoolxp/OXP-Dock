@@ -45,31 +45,17 @@ body.vollbreit .spacer { flex: 1; min-width: 8px; }
 .tile:hover img { transform: translateY(-2px) scale(1.08); }
 .tile:active img { transform: scale(0.9); filter: brightness(.7); transition-duration: 0s; }
 
-/* Leuchtkreis um den Würfel wie in der Handy-App (streamplan/mobile-app, app-tabs.tsx „CubeGlow“): oben Rosa, rechts
-   unten Türkis, links unten Lila, voll bis zur Würfelkante, dann weich auslaufend. Ist jemand live, atmet er und es
-   laufen zwei Wellen nach außen. Maße im selben Verhältnis zum sichtbaren Würfel wie in der App. */
+/* Leuchtkreis hinter dem Würfel im Stil der Handy-App (streamplan/mobile-app, app-tabs.tsx „CubeGlow“): oben Rosa,
+   rechts unten Türkis, links unten Lila, voll bis zur Würfelkante, dann weich auslaufend. Nur unter der Maus: er baut
+   sich in 1 Sekunde auf und verschwindet beim Verlassen schneller wieder. */
 #bar { isolation: isolate; } /* der Kreis liegt über dem Leistengrund, aber hinter allen Symbolen */
 .glow {
   position: absolute; left: 50%; top: 50%; width: 68px; height: 68px; margin: -34px 0 0 -34px; z-index: -1;
-  border-radius: 50%; pointer-events: none; opacity: .55; transition: opacity .2s;
+  border-radius: 50%; pointer-events: none; opacity: 0; transition: opacity .3s ease-out;
   background: conic-gradient(#d946ef, #22d3ee 120deg, #8b5cf6 240deg, #d946ef);
   -webkit-mask-image: radial-gradient(circle closest-side, #000 51.5%, rgba(0, 0, 0, .8) 62%, rgba(0, 0, 0, .55) 72%, rgba(0, 0, 0, .3) 82%, rgba(0, 0, 0, .1) 92%, transparent);
 }
-.tile:hover .glow:not(.welle) { opacity: .85; }
-.glow.welle { display: none; opacity: 0; }
-.tile.live .glow:not(.welle) { animation: wuerfel-atmen 2.2s ease-in-out infinite; }
-.tile.live .glow.welle { display: block; animation: wuerfel-welle 2.2s linear infinite; }
-.tile.live .glow.welle.zweite { animation-delay: 1.1s; }
-@keyframes wuerfel-atmen { 0%, 100% { opacity: 1; } 50% { opacity: .78; } }
-/* Verlauf der App („schnell los, sanft aus“) in Stützpunkten nachgebildet */
-@keyframes wuerfel-welle {
-  0% { opacity: 0; transform: scale(.5); }
-  6.2% { opacity: .85; transform: scale(.6); }
-  25% { opacity: .54; transform: scale(.85); }
-  50% { opacity: .24; transform: scale(1.1); }
-  75% { opacity: .06; transform: scale(1.25); }
-  100% { opacity: 0; transform: scale(1.3); }
-}
+.tile:hover .glow { opacity: .85; transition: opacity 1s ease-in-out; }
 
 .icon-btn { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--leise); transition: background .2s ease-out, color .2s; }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
