@@ -1,6 +1,6 @@
 {
   "name": "oxp-dock",
-  "version": "1.4.15",
+  "version": "1.4.16",
   "private": true,
   "type": "module",
   "description": "OXP Dock – eigene Taskleiste mit Live-Widgets für OldschoolXP",
