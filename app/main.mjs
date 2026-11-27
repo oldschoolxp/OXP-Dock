@@ -1645,7 +1645,19 @@ ipcMain.handle("click-group", (_e, { match, pinPath }) => {
     return;
   }
   const activeIdx = wins.findIndex((w) => w.hwnd === lastForeground);
-  if (activeIdx === -1) return win.activate(wins[0].hwnd);
+  if (activeIdx === -1) {
+    // Programme, deren Fenster von einem Helfer kommen (Steam: steamwebhelper), haben oft Neben-Fenster wie die
+    // Freundesliste. Ein Klick soll das HAUPTfenster bringen: das mit dem Namen des angehefteten Programms – und gibt es
+    // das gerade nicht (Steam liegt im Infobereich, nur die Freundesliste ist offen), das Programm starten, das zeigt es.
+    const pin = config.pins.find((p) => p.match === match);
+    const helfer = wins.some((w) => (w.exe || "").toLowerCase() !== hauptProgramm(w.exe || "").toLowerCase());
+    if (pin && helfer) {
+      const haupt = wins.find((w) => w.title.trim().toLowerCase() === String(pin.name || "").trim().toLowerCase());
+      if (haupt) return win.activate(haupt.hwnd);
+      if (pinPath) return launchPin(pinPath);
+    }
+    return win.activate(wins[0].hwnd);
+  }
   if (wins.length === 1) return win.minimize(wins[0].hwnd);
   // mehrere Fenster: zum nächsten (hintersten) wechseln
   win.activate(wins[wins.length - 1].hwnd);
